@@ -1,0 +1,60 @@
+{
+  "//": "EXAMPLE ONLY — this is the snippet install-hooks.mjs merges into your ~/.claude/settings.json 'hooks' block. It does NOT do anything on its own. Each hook shells out to a tiny emitter the agent watches; here we just append a line to ~/.claude-dash/hook-events.jsonl, which the agent tails for PRECISE status/permission signals (vs. the agent's default transcript-parsing fallback). Adjust the command to your platform; the Windows examples use PowerShell.",
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command \"Add-Content -Path \\\"$env:USERPROFILE/.claude-dash/hook-events.jsonl\\\" -Value (@{event='SessionStart';sessionId=$env:CLAUDE_SESSION_ID;ts=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()} | ConvertTo-Json -Compress)\""
+          }
+        ]
+      }
+    ],
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command \"Add-Content -Path \\\"$env:USERPROFILE/.claude-dash/hook-events.jsonl\\\" -Value (@{event='UserPromptSubmit';sessionId=$env:CLAUDE_SESSION_ID;ts=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();status='working'} | ConvertTo-Json -Compress)\""
+          }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command \"Add-Content -Path \\\"$env:USERPROFILE/.claude-dash/hook-events.jsonl\\\" -Value (@{event='Stop';sessionId=$env:CLAUDE_SESSION_ID;ts=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();status='awaiting-input'} | ConvertTo-Json -Compress)\""
+          }
+        ]
+      }
+    ],
+    "Notification": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command \"Add-Content -Path \\\"$env:USERPROFILE/.claude-dash/hook-events.jsonl\\\" -Value (@{event='Notification';sessionId=$env:CLAUDE_SESSION_ID;ts=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();status='needs-attention'} | ConvertTo-Json -Compress)\""
+          }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "*",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -Command \"Add-Content -Path \\\"$env:USERPROFILE/.claude-dash/hook-events.jsonl\\\" -Value (@{event='PreToolUse';sessionId=$env:CLAUDE_SESSION_ID;ts=[DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds();tool=$env:CLAUDE_TOOL_NAME} | ConvertTo-Json -Compress)\""
+          }
+        ]
+      }
+    ]
+  }
+}

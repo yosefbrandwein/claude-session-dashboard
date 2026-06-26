@@ -1,0 +1,23 @@
+{
+  "name": "@csd/agent",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Device agent: collects live Claude Code sessions from ~/.claude, publishes presence + durable metadata to Firebase, and injects messages on command.",
+  "main": "src/index.ts",
+  "scripts": {
+    "start": "tsx src/index.ts",
+    "dev": "tsx watch src/index.ts",
+    "dry-run": "tsx src/dryRun.ts",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test --import tsx test/*.test.ts"
+  },
+  "dependencies": {
+    "firebase": "^12.15.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  }
+}
