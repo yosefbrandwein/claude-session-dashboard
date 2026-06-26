@@ -1,0 +1,21 @@
+{
+  "name": "claude-session-dashboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Multi-device, multi-tenant dashboard for live Claude Code sessions, backed by Firebase.",
+  "workspaces": [
+    "shared",
+    "packages/agent",
+    "packages/dashboard"
+  ],
+  "scripts": {
+    "emulators": "firebase emulators:start",
+    "rules:test": "npm -w shared run test:rules",
+    "agent": "npm -w @csd/agent run start",
+    "dashboard:dev": "npm -w @csd/dashboard run dev",
+    "build": "npm -w @csd/shared run build && npm -w @csd/dashboard run build"
+  },
+  "devDependencies": {
+    "firebase-tools": "^15.0.0"
+  }
+}

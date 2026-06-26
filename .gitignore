@@ -1,0 +1,16 @@
+node_modules/
+dist/
+build/
+.firebase/
+*.log
+.DS_Store
+.env
+.env.local
+firebase-debug.log
+firestore-debug.log
+database-debug.log
+ui-debug.log
+*.tsbuildinfo
+.tmp_*
+# never commit real service-account keys
+serviceAccount*.json

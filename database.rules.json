@@ -1,0 +1,15 @@
+{
+  "rules": {
+    "presence": {
+      "$uid": {
+        ".read": "auth != null && auth.uid === $uid",
+        ".write": "auth != null && auth.uid === $uid",
+        "$deviceId": {
+          "$sessionId": {
+            ".validate": "newData.hasChildren(['status','heartbeatAt'])"
+          }
+        }
+      }
+    }
+  }
+}

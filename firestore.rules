@@ -1,0 +1,48 @@
+rules_version = '2';
+// Multi-tenant isolation: a signed-in user can only ever touch documents under
+// their own users/{uid} subtree. This file is the ENTIRE server-side auth layer
+// (no Cloud Functions — Spark free plan).
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(uid) {
+      return request.auth != null && request.auth.uid == uid;
+    }
+
+    match /users/{uid} {
+      allow read, write: if isOwner(uid);
+
+      // Devices registered by this user's agents.
+      match /devices/{deviceId} {
+        allow read, write: if isOwner(uid);
+      }
+
+      // Durable session records + their sub-collections.
+      match /sessions/{sessionId} {
+        allow read, write: if isOwner(uid);
+        match /messages/{messageId} {
+          allow read, write: if isOwner(uid);
+        }
+        match /permissionRequests/{reqId} {
+          allow read, write: if isOwner(uid);
+        }
+      }
+
+      // Dashboard -> agent control channel. Shape-validated so a compromised
+      // client cannot write arbitrary command types or oversized payloads.
+      match /commands/{cmdId} {
+        allow read: if isOwner(uid);
+        allow delete: if isOwner(uid);
+        allow create: if isOwner(uid)
+          && request.resource.data.type in ['sendMessage','interrupt','approve','deny']
+          && request.resource.data.status == 'pending'
+          && request.resource.data.sessionId is string
+          && (!('payload' in request.resource.data)
+              || request.resource.data.payload.size() < 8000);
+        // updates are how the agent acks/completes a command
+        allow update: if isOwner(uid)
+          && request.resource.data.status in ['pending','acked','done','error'];
+      }
+    }
+  }
+}
