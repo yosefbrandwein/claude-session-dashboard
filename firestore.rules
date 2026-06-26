@@ -37,8 +37,12 @@ service cloud.firestore {
           && request.resource.data.type in ['sendMessage','interrupt','approve','deny']
           && request.resource.data.status == 'pending'
           && request.resource.data.sessionId is string
+          // Bound the injected message length. NOTE: map.size() returns the
+          // number of KEYS, not bytes — so guard the text STRING's length
+          // (string.size() == character count) instead.
           && (!('payload' in request.resource.data)
-              || request.resource.data.payload.size() < 8000);
+              || !('text' in request.resource.data.payload)
+              || request.resource.data.payload.text.size() <= 8000);
         // updates are how the agent acks/completes a command
         allow update: if isOwner(uid)
           && request.resource.data.status in ['pending','acked','done','error'];

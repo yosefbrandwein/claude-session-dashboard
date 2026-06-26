@@ -7,10 +7,21 @@
   "exports": {
     ".": "./src/index.ts",
     "./types": "./src/types.ts",
-    "./firebaseConfig": "./src/firebaseConfig.ts"
+    "./firebaseConfig": "./src/firebaseConfig.ts",
+    "./clientWeb": "./src/clientWeb.ts",
+    "./clientNode": "./src/clientNode.ts"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json || true",
+    "typecheck": "tsc -p tsconfig.json",
     "test:rules": "node --test ./test/*.test.js"
+  },
+  "dependencies": {
+    "firebase": "^12.15.0"
+  },
+  "devDependencies": {
+    "@firebase/rules-unit-testing": "^5.0.1",
+    "@types/node": "^24.13.2",
+    "typescript": "^6.0.3"
   }
 }
