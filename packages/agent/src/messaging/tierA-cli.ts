@@ -18,6 +18,35 @@
 import { spawn as nodeSpawn, type ChildProcess } from 'node:child_process';
 import { createInterface } from 'node:readline';
 import { EventEmitter } from 'node:events';
+import { existsSync } from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
+
+/**
+ * Resolve the claude executable to spawn. CRITICAL on Windows: the thing on PATH
+ * is the npm shim `claude.cmd`, and Node refuses to spawn a `.cmd` without
+ * `shell:true` — but shell:true would interpolate our prompt arg through cmd.exe
+ * (command injection). So we resolve the REAL native `claude.exe` that the shim
+ * ultimately execs and spawn it directly with shell:false. Override with
+ * CSD_CLAUDE_BIN if claude is installed elsewhere.
+ */
+export function resolveClaudeBin(): string {
+  if (process.env.CSD_CLAUDE_BIN) return process.env.CSD_CLAUDE_BIN;
+  if (process.platform === 'win32') {
+    const rel = ['node_modules', '@anthropic-ai', 'claude-code', 'bin', 'claude.exe'];
+    const roots = [
+      process.env.APPDATA && path.join(process.env.APPDATA, 'npm'),
+      process.env.LOCALAPPDATA && path.join(process.env.LOCALAPPDATA, 'npm'),
+      path.join(os.homedir(), 'AppData', 'Roaming', 'npm'),
+    ].filter(Boolean) as string[];
+    for (const root of roots) {
+      const candidate = path.join(root, ...rel);
+      if (existsSync(candidate)) return candidate;
+    }
+    return 'claude.exe'; // last resort (still shell:false, no injection)
+  }
+  return 'claude'; // posix shim is directly executable
+}
 
 export interface TierAOptions {
   sessionId: string;
@@ -83,7 +112,7 @@ export class TierARun extends EventEmitter {
   }
 
   start(): this {
-    const bin = this.opts.bin ?? 'claude';
+    const bin = this.opts.bin ?? resolveClaudeBin();
     const args = buildTierAArgs(this.opts);
     const spawn = this.opts.spawnFn ?? nodeSpawn;
 

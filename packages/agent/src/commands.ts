@@ -18,14 +18,12 @@ import { paths } from '../../../shared/src/types';
 import type { CommandDoc, MessageDoc } from '../../../shared/src/types';
 import { TierARun } from './messaging/tierA-cli';
 import { probeDaemon } from './messaging/tierB-daemon';
-import { appendMessages, writePermissionRequest } from './publish';
+import { appendMessagesWithIds, writePermissionDecision } from './publish';
 
 /** What the dispatcher needs to know about each session to act on it. */
 export interface SessionContext {
   sessionId: string;
   cwd: string;
-  /** Current line count, so injected assistant output lands after history. */
-  messageBaseIndex: number;
   model: string | null;
 }
 
@@ -132,7 +130,11 @@ async function runTierA(
   });
   activeRuns.set(ctx.sessionId, run);
 
-  let index = ctx.messageBaseIndex;
+  // Tier A chunks live in a DISJOINT id namespace (`tierA-<cmdId>-<n>`) so they
+  // can NEVER collide with the line-indexed transcript docs the tick writes —
+  // those use numeric `lineIndexId` ids (see F5). A non-numeric prefix guarantees
+  // disjointness even if `index` happened to equal a real transcript line index.
+  let index = 0;
   const collected: string[] = [];
 
   run.on('event', (ev) => {
@@ -148,8 +150,11 @@ async function runTierA(
         m._text = ev.text;
         collected.push(ev.text);
       }
-      // Best-effort append; index advances per emitted assistant chunk.
-      void appendMessages(rt.uid, ctx.sessionId, index++, [m], rt.captureContent).catch(() => {});
+      const id = `tierA-${cmdId}-${index++}`;
+      // Best-effort append; id advances per emitted assistant chunk.
+      void appendMessagesWithIds(rt.uid, ctx.sessionId, [{ id, msg: m }], rt.captureContent).catch(
+        () => {},
+      );
     }
   });
 
@@ -192,19 +197,14 @@ async function handleInterrupt(rt: CommandRuntime, cmdId: string, cmd: CommandDo
  * user locally, so here we just durably record the dashboard's decision.
  */
 async function handleDecision(rt: CommandRuntime, cmdId: string, cmd: CommandDoc): Promise<void> {
-  const decision = cmd.type === 'approve' ? 'approved' : 'denied';
+  const decision: 'approved' | 'denied' = cmd.type === 'approve' ? 'approved' : 'denied';
   const reqId = cmd.payload?.reqId;
-  if (reqId) {
-    // Re-stamp the permission request with the dashboard's decision.
-    await writePermissionRequest(rt.uid, cmd.sessionId, {
-      tool: 'unknown',
-      inputSummary: `decision via dashboard for ${reqId}`,
-      ts: Date.now(),
-      decision: decision === 'approved' ? 'approved' : 'denied',
-      decidedAt: Date.now(),
-      decidedBy: 'dashboard',
-      source: 'sdk',
-    });
+  if (!reqId) {
+    await finish(rt.uid, cmdId, 'error', `${cmd.type} requires payload.reqId`);
+    return;
   }
-  await finish(rt.uid, cmdId, 'done', `recorded ${decision}`);
+  // Merge the decision onto the EXISTING request doc keyed by reqId — do NOT
+  // synthesize a new ts/tool, which would orphan the original as pending (F7).
+  await writePermissionDecision(rt.uid, cmd.sessionId, reqId, decision, 'dashboard');
+  await finish(rt.uid, cmdId, 'done', `recorded ${decision} for ${reqId}`);
 }

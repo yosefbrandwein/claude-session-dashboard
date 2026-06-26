@@ -5,7 +5,30 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import * as path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { TierARun, normalizeEvent, buildTierAArgs } from '../src/messaging/tierA-cli';
+import { TierARun, normalizeEvent, buildTierAArgs, resolveClaudeBin } from '../src/messaging/tierA-cli';
+
+test('resolveClaudeBin honors CSD_CLAUDE_BIN override (so the .cmd shim / shell:true is never needed)', () => {
+  const prev = process.env.CSD_CLAUDE_BIN;
+  process.env.CSD_CLAUDE_BIN = '/custom/path/to/claude.exe';
+  try {
+    assert.equal(resolveClaudeBin(), '/custom/path/to/claude.exe');
+  } finally {
+    if (prev === undefined) delete process.env.CSD_CLAUDE_BIN;
+    else process.env.CSD_CLAUDE_BIN = prev;
+  }
+});
+
+test('resolveClaudeBin resolves a concrete executable, never a bare .cmd-prone name on win32', () => {
+  const prev = process.env.CSD_CLAUDE_BIN;
+  delete process.env.CSD_CLAUDE_BIN;
+  try {
+    const bin = resolveClaudeBin();
+    if (process.platform === 'win32') assert.ok(/claude\.exe$/i.test(bin), `expected a claude.exe path, got ${bin}`);
+    else assert.equal(bin, 'claude');
+  } finally {
+    if (prev !== undefined) process.env.CSD_CLAUDE_BIN = prev;
+  }
+});
 
 const FAKE = path.join(
   path.dirname(fileURLToPath(import.meta.url)),

@@ -31,7 +31,13 @@ export interface CollectedSession {
   transcriptPath: string | null;
   signal: TranscriptSignal | null;
   lastActivityAt: number;
-  /** Tier B candidacy: an interactive session advertising the peer protocol. */
+  /**
+   * Tier-A controllability (F11): true for any LIVE (non-stale, non-ended)
+   * session that has a sessionId — a headless `claude --resume` turn can act on
+   * its history. This is NOT gated on the infeasible Tier B peer protocol.
+   * HONESTY: Tier A runs a SEPARATE headless turn on the same conversation
+   * history; it does NOT type into the user's open desktop window.
+   */
   controllableHint: boolean;
 }
 
@@ -69,9 +75,11 @@ export async function collectOnce(opts: {
       transcriptPath,
       signal,
       lastActivityAt,
-      // An interactive desktop session that advertises peerProtocol is the
-      // Tier B injection candidate (see daemon findings in README).
-      controllableHint: pidAlive && parsed.peerProtocol != null && parsed.kind === 'interactive',
+      // F11: Tier-A eligibility — a LIVE session (not stale/ended) with a
+      // sessionId can be resumed by a headless `claude --resume` turn. We do NOT
+      // gate on peerProtocol/kind (the Tier B path) which is infeasible and made
+      // `controllable` permanently false in the UI.
+      controllableHint: status !== 'stale' && status !== 'ended' && parsed.sessionId.length > 0,
     });
   }
   return { collectedAt: now, sessions };

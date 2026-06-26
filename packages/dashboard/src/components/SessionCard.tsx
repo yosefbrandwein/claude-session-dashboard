@@ -5,6 +5,8 @@ import { formatAgo, formatElapsed, formatStart } from '../util';
 
 interface Props {
   session: MergedSession;
+  /** Shared 1Hz clock from App — one timer drives all cards' relative time. */
+  now: number;
   selected: boolean;
   onClick: () => void;
 }
@@ -18,13 +20,9 @@ const STATUS_COLOR_VAR: Record<string, string> = {
   ended: 'var(--st-ended)',
 };
 
-export function SessionCard({ session: s, selected, onClick }: Props) {
-  // Local 1s tick so the elapsed timer + "ago" stay live between data updates.
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    const id = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(id);
-  }, []);
+export function SessionCard({ session: s, now, selected, onClick }: Props) {
+  // Relative-time rendering is driven by App's shared `now` clock (passed as a
+  // prop) so a single timer ticks every card instead of one interval per card.
 
   // Flash the card briefly when the status transitions.
   const prevStatus = useRef(s.status);

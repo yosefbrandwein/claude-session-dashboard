@@ -50,7 +50,7 @@ function Dashboard({
   email: string;
   onLogout: () => Promise<void>;
 }) {
-  const { sessions } = useSessions(uid);
+  const { sessions, presenceLoaded, sessionsLoaded } = useSessions(uid);
 
   const [group, setGroup] = useState<GroupMode>('device-project');
   const [sort, setSort] = useState<SortMode>('newest');
@@ -124,15 +124,23 @@ function Dashboard({
 
       <main className="content">
         {visible.length === 0 ? (
-          <div className="empty">
-            {sessions.length === 0
-              ? 'No sessions yet. Start a Claude Code session with the agent running to see it here.'
-              : 'No sessions match the current filters.'}
-          </div>
+          // Don't show the terminal "No sessions yet" copy until BOTH backend
+          // snapshots have resolved; otherwise the initial round-trip flashes
+          // the empty state even when sessions exist.
+          !presenceLoaded || !sessionsLoaded ? (
+            <div className="empty muted">Loading sessions…</div>
+          ) : (
+            <div className="empty">
+              {sessions.length === 0
+                ? 'No sessions yet. Start a Claude Code session with the agent running to see it here.'
+                : 'No sessions match the current filters.'}
+            </div>
+          )
         ) : (
           <SessionGroupList
             groups={groups}
             groupMode={group}
+            now={now}
             selectedKey={selectedKey}
             onSelect={(s) => setSelectedKey(s.key)}
           />

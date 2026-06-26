@@ -8,6 +8,8 @@ import { SessionCard } from './SessionCard';
 interface Props {
   groups: SessionGroup[];
   groupMode: GroupMode;
+  /** Shared 1Hz clock from App, threaded down so one timer drives all cards. */
+  now: number;
   selectedKey: string | null;
   onSelect: (s: MergedSession) => void;
 }
@@ -15,6 +17,7 @@ interface Props {
 export function SessionGroupList({
   groups,
   groupMode,
+  now,
   selectedKey,
   onSelect,
 }: Props) {
@@ -61,6 +64,7 @@ export function SessionGroupList({
                       <SessionCard
                         key={s.key}
                         session={s}
+                        now={now}
                         selected={s.key === selectedKey}
                         onClick={() => onSelect(s)}
                       />

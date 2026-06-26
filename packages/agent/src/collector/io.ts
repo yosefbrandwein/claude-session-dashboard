@@ -143,16 +143,18 @@ export async function readTranscriptSignal(filePath: string): Promise<Transcript
   } catch {
     return null;
   }
-  // Count lines + grab the last non-empty line's timestamp by streaming.
+  // Count EVERY emitted line (raw line count) so this coordinate agrees with
+  // readTranscriptEntriesFrom's `totalLines` / absolute `lineIndex`. We also grab
+  // the last non-empty line's timestamp for the activity signal.
+  // NOTE: lineCount is the RAW line count (blank lines included), NOT the count of
+  // non-blank lines — both readers must share one coordinate space (see F2).
   let lineCount = 0;
   let lastLine = '';
   await new Promise<void>((resolve, reject) => {
     const rl = createInterface({ input: createReadStream(filePath, { encoding: 'utf8' }) });
     rl.on('line', (l) => {
-      if (l.trim().length) {
-        lineCount++;
-        lastLine = l;
-      }
+      lineCount++;
+      if (l.trim().length) lastLine = l;
     });
     rl.on('close', () => resolve());
     rl.on('error', reject);
@@ -173,25 +175,34 @@ export async function readTranscriptSignal(filePath: string): Promise<Transcript
   return { lineCount, lastEntryTs, mtimeMs };
 }
 
+/** One parsed transcript entry tagged with its absolute 0-based raw line index. */
+export interface IndexedTranscriptEntry {
+  entry: RawTranscriptEntry;
+  /** Absolute 0-based line index in the raw file (blank/unparseable lines counted). */
+  lineIndex: number;
+}
+
 /**
- * Read transcript entries with line index >= `fromLine` (0-based). Returns the
- * parsed JSON objects plus the new total line count, so the caller can persist
- * only NEW lines incrementally. Skips unparseable (e.g. partially-written) lines.
+ * Read transcript entries with raw line index >= `fromLine` (0-based). Returns
+ * each parsed entry tagged with its ABSOLUTE raw line index plus the new total
+ * raw line count, so the caller can persist only NEW lines incrementally AND key
+ * each message by its true transcript position (see F3). Skips unparseable (e.g.
+ * partially-written) lines but still counts them so the coordinate stays absolute.
  */
 export async function readTranscriptEntriesFrom(
   filePath: string,
   fromLine: number,
-): Promise<{ entries: RawTranscriptEntry[]; totalLines: number }> {
-  const entries: RawTranscriptEntry[] = [];
+): Promise<{ entries: IndexedTranscriptEntry[]; totalLines: number }> {
+  const entries: IndexedTranscriptEntry[] = [];
   let idx = 0;
   await new Promise<void>((resolve, reject) => {
     const rl = createInterface({ input: createReadStream(filePath, { encoding: 'utf8' }) });
     rl.on('line', (l) => {
-      const cur = idx++;
+      const cur = idx++; // absolute raw line index (counts blank/partial lines)
       if (!l.trim().length) return;
       if (cur < fromLine) return;
       try {
-        entries.push(JSON.parse(l) as RawTranscriptEntry);
+        entries.push({ entry: JSON.parse(l) as RawTranscriptEntry, lineIndex: cur });
       } catch {
         // partial line; will be re-read next tick once flushed.
       }

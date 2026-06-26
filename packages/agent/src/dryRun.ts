@@ -42,10 +42,10 @@ async function main() {
         const { entries, totalLines } = await readTranscriptEntriesFrom(path, 0);
         const tail = entries.slice(-3);
         let denials = 0;
-        for (const e of entries) if (parsePermissionDenial(e, now)) denials++;
+        for (const e of entries) if (parsePermissionDenial(e.entry, now)) denials++;
         console.log(`metadata  ${totalLines} lines, ${denials} detected denial(s). Last 3 messages:`);
         for (const e of tail) {
-          const m = parseTranscriptEntry(e, now);
+          const m = parseTranscriptEntry(e.entry, now);
           if (!m) continue;
           const tools = m.toolCalls?.map((t) => t.name).join(',') ?? '';
           console.log(

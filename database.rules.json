@@ -6,7 +6,15 @@
         ".write": "auth != null && auth.uid === $uid",
         "$deviceId": {
           "$sessionId": {
-            ".validate": "newData.hasChildren(['status','heartbeatAt'])"
+            ".validate": "newData.hasChildren(['status','heartbeatAt'])",
+            "status": { ".validate": "newData.isString()" },
+            "project": { ".validate": "newData.isString()" },
+            "branch": { ".validate": "newData.isString() || newData.val() === null" },
+            "pid": { ".validate": "newData.isNumber()" },
+            "startedAt": { ".validate": "newData.isNumber()" },
+            "lastActivityAt": { ".validate": "newData.isNumber()" },
+            "heartbeatAt": { ".validate": "newData.isNumber()" },
+            "$other": { ".validate": false }
           }
         }
       }

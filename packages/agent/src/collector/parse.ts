@@ -29,7 +29,9 @@ export interface ParsedSession {
 
 /** Activity signal extracted from a transcript file (pure: caller provides mtime). */
 export interface TranscriptSignal {
-  /** Total non-empty lines ≈ transcript entry count. */
+  /** Total RAW lines emitted by the reader (blank lines included). Shares one
+   *  coordinate space with readTranscriptEntriesFrom's totalLines / lineIndex so
+   *  the incremental reader and the command base index agree (see F2). */
   lineCount: number;
   /** Epoch ms of the newest parseable entry timestamp, else null. */
   lastEntryTs: number | null;

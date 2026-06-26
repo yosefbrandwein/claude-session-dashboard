@@ -13,8 +13,22 @@ interface Props {
 }
 
 export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props) {
-  const { messages, permissions, loaded, sendMessage, interrupt, decide } =
-    useSessionDetail(uid, s.sessionId);
+  const {
+    messages,
+    permissions,
+    loaded,
+    permsLoaded,
+    commandInFlight,
+    sendMessage,
+    interrupt,
+    decide,
+  } = useSessionDetail(uid, s.sessionId, (status, result) =>
+    onToast(
+      status === 'done'
+        ? `Agent: ${result || 'done'}`
+        : `Agent error: ${result || 'unknown error'}`,
+    ),
+  );
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
 
@@ -100,7 +114,8 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
               Permission requests
               {permissions.length > 0 ? ` (${permissions.length})` : ''}
             </h3>
-            {permissions.length === 0 && (
+            {!permsLoaded && <p className="muted">Loading…</p>}
+            {permsLoaded && permissions.length === 0 && (
               <p className="muted">No permission requests recorded.</p>
             )}
             {permissions.map((p) => {
@@ -118,20 +133,26 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
                     {formatAgo(p.ts, now)} · via {p.source}
                   </div>
                   {pending && (
-                    <div className="perm-actions">
-                      <button
-                        className="btn primary"
-                        onClick={() => doDecide(p, true)}
-                      >
-                        Approve
-                      </button>
-                      <button
-                        className="btn danger"
-                        onClick={() => doDecide(p, false)}
-                      >
-                        Deny
-                      </button>
-                    </div>
+                    <>
+                      <div className="perm-actions">
+                        <button
+                          className="btn primary"
+                          onClick={() => doDecide(p, true)}
+                        >
+                          Approve
+                        </button>
+                        <button
+                          className="btn danger"
+                          onClick={() => doDecide(p, false)}
+                        >
+                          Deny
+                        </button>
+                      </div>
+                      <p className="note">
+                        Records the decision; it does not unblock a prompt in the
+                        live desktop session (that needs the opt-in hooks).
+                      </p>
+                    </>
                   )}
                 </div>
               );
@@ -190,22 +211,32 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
               }
             }}
           />
+          <p className="note">
+            Sends a new headless turn via <code>claude --resume</code> on this
+            conversation — it does not type into the open desktop window.
+          </p>
           <div className="compose-row">
             <button
               className="btn danger"
               onClick={doInterrupt}
-              title="Send an interrupt command"
+              disabled={!commandInFlight}
+              title="Interrupt the in-flight headless turn"
             >
               Interrupt
             </button>
+            {commandInFlight && (
+              <span className="cmd-status">
+                <span className="spinner" aria-hidden="true" /> working…
+              </span>
+            )}
             <span className="spacer" />
             <span className="muted">⌘/Ctrl + Enter</span>
             <button
               className="btn primary"
               onClick={send}
-              disabled={sending || !text.trim()}
+              disabled={sending || commandInFlight || !text.trim()}
             >
-              {sending ? 'Sending…' : 'Send'}
+              {sending || commandInFlight ? 'Sending…' : 'Send'}
             </button>
           </div>
         </div>

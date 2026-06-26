@@ -714,6 +714,44 @@ button {
 .compose-row .spacer {
   flex: 1;
 }
+
+/* Honest, low-key explanatory copy under compose + approve/deny. */
+.note {
+  color: var(--text-faint);
+  font-size: 11px;
+  line-height: 1.4;
+  margin: 6px 0 0;
+}
+.note code {
+  font-size: 10.5px;
+  padding: 1px 4px;
+  border-radius: 4px;
+  background: var(--bg-elev-2);
+  border: 1px solid var(--border);
+}
+
+/* In-flight command indicator next to the compose buttons. */
+.cmd-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-faint);
+  font-size: 11px;
+}
+.spinner {
+  width: 11px;
+  height: 11px;
+  border: 2px solid var(--border-strong);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  display: inline-block;
+  animation: spin 0.7s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
 .muted {
   color: var(--text-faint);
   font-size: 11px;

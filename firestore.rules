@@ -37,15 +37,31 @@ service cloud.firestore {
           && request.resource.data.type in ['sendMessage','interrupt','approve','deny']
           && request.resource.data.status == 'pending'
           && request.resource.data.sessionId is string
+          && request.resource.data.sessionId.size() <= 200
           // Bound the injected message length. NOTE: map.size() returns the
           // number of KEYS, not bytes — so guard the text STRING's length
           // (string.size() == character count) instead.
           && (!('payload' in request.resource.data)
               || !('text' in request.resource.data.payload)
-              || request.resource.data.payload.text.size() <= 8000);
-        // updates are how the agent acks/completes a command
+              || request.resource.data.payload.text.size() <= 8000)
+          && (!('payload' in request.resource.data)
+              || !('reqId' in request.resource.data.payload)
+              || request.resource.data.payload.reqId.size() <= 200);
+        // Updates are how the agent acks/completes a command. Re-assert the
+        // invariants and FREEZE identity fields so a client can't create a
+        // benign command then mutate it into an arbitrary type / oversized
+        // payload, bypassing the create-time validation (F8).
         allow update: if isOwner(uid)
-          && request.resource.data.status in ['pending','acked','done','error'];
+          && request.resource.data.type == resource.data.type
+          && request.resource.data.sessionId == resource.data.sessionId
+          && request.resource.data.status in ['pending','acked','done','error']
+          && request.resource.data.sessionId.size() <= 200
+          && (!('payload' in request.resource.data)
+              || !('text' in request.resource.data.payload)
+              || request.resource.data.payload.text.size() <= 8000)
+          && (!('payload' in request.resource.data)
+              || !('reqId' in request.resource.data.payload)
+              || request.resource.data.payload.reqId.size() <= 200);
       }
     }
   }

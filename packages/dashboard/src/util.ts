@@ -40,6 +40,14 @@ export function formatStart(tsMs: number): string {
   });
 }
 
+/** 1 for active sessions, 0 otherwise — used as a primary sort key. */
+const activeRank = (s: MergedSession): number =>
+  ACTIVE_STATUSES.has(s.status) ? 1 : 0;
+
+/** Stable secondary tie-break so equal-timestamp rows keep a fixed order. */
+const bySessionId = (a: MergedSession, b: MergedSession): number =>
+  a.sessionId.localeCompare(b.sessionId);
+
 export function sortSessions(
   sessions: MergedSession[],
   mode: SortMode,
@@ -47,14 +55,30 @@ export function sortSessions(
   const copy = [...sessions];
   switch (mode) {
     case 'newest':
-      copy.sort((a, b) => b.startedAt - a.startedAt);
+      copy.sort(
+        (a, b) => b.startedAt - a.startedAt || bySessionId(a, b),
+      );
       break;
     case 'most-active':
-      copy.sort((a, b) => b.lastActivityAt - a.lastActivityAt);
+      // Active sessions always rank ahead of ended/stale ones, so a recently
+      // ended session can't outrank a live working one; then most-recent
+      // activity, then a stable id tie-break.
+      copy.sort(
+        (a, b) =>
+          activeRank(b) - activeRank(a) ||
+          b.lastActivityAt - a.lastActivityAt ||
+          bySessionId(a, b),
+      );
       break;
     case 'longest-running':
-      // Longest-running == oldest start time first.
-      copy.sort((a, b) => a.startedAt - b.startedAt);
+      // Longest-running == oldest start time first, but active sessions rank
+      // ahead of ended/stale ones; stable id tie-break for equal starts.
+      copy.sort(
+        (a, b) =>
+          activeRank(b) - activeRank(a) ||
+          a.startedAt - b.startedAt ||
+          bySessionId(a, b),
+      );
       break;
   }
   return copy;
@@ -146,5 +170,11 @@ export function activeCount(sessions: MergedSession[]): number {
 }
 
 export function deviceCount(sessions: MergedSession[]): number {
-  return new Set(sessions.map((s) => s.deviceId)).size;
+  // Count only devices with at least one ACTIVE session, so the header's
+  // "across M devices" doesn't inflate M with ended/stale-only devices.
+  return new Set(
+    sessions
+      .filter((s) => ACTIVE_STATUSES.has(s.status))
+      .map((s) => s.deviceId),
+  ).size;
 }

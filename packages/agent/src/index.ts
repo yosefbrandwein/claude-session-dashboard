@@ -8,6 +8,7 @@
 //   USE_FIREBASE_EMULATORS=1 CSD_EMAIL=demo@demo.dev CSD_PASSWORD=demo123 \
 //     npx tsx src/index.ts
 // ============================================================================
+import { pathToFileURL } from 'node:url';
 import { signInAgent, getAuthInstance } from '../../../shared/src/clientNode';
 import { loadConfig } from './config';
 import { deviceId, deviceDoc, gitBranch } from './device';
@@ -19,12 +20,14 @@ import {
   publishPresence,
   clearPresence,
   writeSessionDoc,
-  appendMessages,
+  appendMessagesWithIds,
+  lineIndexId,
   writePermissionRequest,
+  type IdentifiedMessage,
 } from './publish';
 import { listenForCommands, type SessionContext } from './commands';
 import { probeDaemon } from './messaging/tierB-daemon';
-import type { MessageDoc, PermissionRequestDoc } from '../../../shared/src/types';
+import type { MessageDoc, PermissionRequestDoc, SessionDoc } from '../../../shared/src/types';
 
 const AGENT_VERSION = '0.1.0';
 
@@ -34,7 +37,11 @@ interface SessionState {
   branch: string | null;
   model: string | null;
   cwd: string;
-  lineCount: number; // latest known transcript line count (command base index)
+  /** Serialized form of the last SessionDoc we wrote — skip the write when
+   *  unchanged so an always-present session doesn't bill a write every tick (F1). */
+  lastSessionDocJson: string | null;
+  /** True once we've written a terminal (stale/ended) doc — write it exactly once. */
+  terminalWritten: boolean;
 }
 const state = new Map<string, SessionState>();
 // Sessions we published to presence last tick (to clear ones that vanished).
@@ -50,17 +57,23 @@ async function tick(uid: string): Promise<void> {
     const sid = c.parsed.sessionId;
     seen.add(sid);
     let st = state.get(sid);
+    const firstSight = !st;
     if (!st) {
       st = {
-        publishedLines: 0,
+        // F4: treat pre-existing transcript history as already-published. On
+        // first sight, seed publishedLines to the current total line count so we
+        // only stream NEW messages going forward (no full-history replay on
+        // every (re)attach). Combined with F3 line-index ids this makes re-ticks
+        // idempotent.
+        publishedLines: c.signal?.lineCount ?? 0,
         branch: await gitBranch(c.parsed.cwd),
         model: await detectModel(c),
         cwd: c.parsed.cwd,
-        lineCount: c.signal?.lineCount ?? 0,
+        lastSessionDocJson: null,
+        terminalWritten: false,
       };
       state.set(sid, st);
     }
-    st.lineCount = c.signal?.lineCount ?? st.lineCount;
 
     // 1) presence (skip stale — they're not "live")
     if (c.status !== 'stale' && c.status !== 'ended') {
@@ -71,14 +84,28 @@ async function tick(uid: string): Promise<void> {
       await clearPresence(uid, dev, sid).catch(() => {});
     }
 
-    // 2) durable session doc
-    await writeSessionDoc(
-      uid,
-      toSessionDoc(c, dev, st.branch, st.model, c.controllableHint),
-    ).catch((e) => console.error('[sessionDoc]', sid, e.message));
+    // 2) durable session doc — only WRITE when the payload actually changed, so
+    //    an always-present session doesn't bill one write per tick (F1). Terminal
+    //    docs (stale/ended + endedAt) are written exactly once, then skipped.
+    //    controllableHint now reflects Tier-A eligibility (F11, computed in
+    //    collect.ts: live + has sessionId), not the infeasible Tier B hint.
+    const isTerminal = c.status === 'stale' || c.status === 'ended';
+    const session = toSessionDoc(c, dev, st.branch, st.model, c.controllableHint);
+    const sessionJson = stableSessionDocJson(session);
+    if (isTerminal && st.terminalWritten) {
+      // already flushed the terminal doc once — nothing more to write.
+    } else if (sessionJson !== st.lastSessionDocJson) {
+      await writeSessionDoc(uid, session).catch((e) =>
+        console.error('[sessionDoc]', sid, e.message),
+      );
+      st.lastSessionDocJson = sessionJson;
+      if (isTerminal) st.terminalWritten = true;
+    }
 
-    // 3) incremental metadata (new transcript lines → messages + permissions)
-    if (c.transcriptPath) {
+    // 3) incremental metadata (new transcript lines → messages + permissions).
+    //    Skipped on first sight: F4 already seeded publishedLines to the current
+    //    line count, so there are no NEW lines to flush yet.
+    if (c.transcriptPath && !firstSight) {
       await flushNewMessages(uid, sid, c, st).catch((e) =>
         console.error('[messages]', sid, e.message),
       );
@@ -90,6 +117,23 @@ async function tick(uid: string): Promise<void> {
     if (!seen.has(key)) await clearPresence(uid, dev, key).catch(() => {});
   }
   lastPresenceKeys = seen;
+
+  // F6: prune state for sessions that vanished this tick. Without this the Map
+  // grows unbounded, and a RECYCLED sessionId would resume a previous session's
+  // stale publishedLines offset. (Terminal sessions are kept while still present
+  // so terminalWritten stays honored; they're dropped once they disappear.)
+  for (const sid of [...state.keys()]) {
+    if (!seen.has(sid)) state.delete(sid);
+  }
+}
+
+/**
+ * Deterministic JSON for a SessionDoc so the F1 dirty-check compares structurally
+ * regardless of key insertion order. Keys are sorted; the value is used only as a
+ * change sentinel, never sent over the wire. Exported for unit testing.
+ */
+export function stableSessionDocJson(doc: SessionDoc): string {
+  return JSON.stringify(doc, Object.keys(doc).sort());
 }
 
 /** Detect the model from the newest assistant transcript entry, best-effort. */
@@ -97,7 +141,7 @@ async function detectModel(c: CollectedSession): Promise<string | null> {
   if (!c.transcriptPath) return null;
   const { entries } = await readTranscriptEntriesFrom(c.transcriptPath, 0);
   for (let i = entries.length - 1; i >= 0; i--) {
-    const m = (entries[i] as any)?.message?.model;
+    const m = (entries[i].entry as any)?.message?.model;
     if (typeof m === 'string') return m;
   }
   return null;
@@ -117,10 +161,10 @@ async function flushNewMessages(
     st.publishedLines = totalLines;
     return;
   }
-  const msgs: (MessageDoc & { _text?: string })[] = [];
+  const items: IdentifiedMessage[] = [];
   const now = Date.now();
-  for (const e of entries) {
-    const parsed = parseTranscriptEntry(e, now);
+  for (const { entry, lineIndex } of entries) {
+    const parsed = parseTranscriptEntry(entry, now);
     if (parsed) {
       const m: MessageDoc & { _text?: string } = {
         ts: parsed.ts,
@@ -129,10 +173,12 @@ async function flushNewMessages(
       };
       if (parsed.toolCalls) m.toolCalls = parsed.toolCalls;
       if (parsed.summary) m.summary = parsed.summary;
-      msgs.push(m);
+      // F3: key each doc by its ABSOLUTE transcript line index, not array
+      // position, so re-ticks overwrite the same doc and ids never drift/collide.
+      items.push({ id: lineIndexId(lineIndex), msg: m });
     }
     // best-effort permission denial detection
-    const denial = parsePermissionDenial(e, now);
+    const denial = parsePermissionDenial(entry, now);
     if (denial) {
       const req: PermissionRequestDoc = {
         tool: denial.tool,
@@ -146,7 +192,7 @@ async function flushNewMessages(
       await writePermissionRequest(uid, sid, req).catch(() => {});
     }
   }
-  await appendMessages(uid, sid, st.publishedLines, msgs, false);
+  await appendMessagesWithIds(uid, sid, items, false);
   st.publishedLines = totalLines;
 }
 
@@ -177,7 +223,6 @@ async function main(): Promise<void> {
       return {
         sessionId,
         cwd: st.cwd,
-        messageBaseIndex: st.lineCount,
         model: st.model,
       };
     },
@@ -209,7 +254,14 @@ async function main(): Promise<void> {
   process.on('SIGTERM', shutdown);
 }
 
-main().catch((e) => {
-  console.error('[agent] fatal:', e);
-  process.exit(1);
-});
+// Only auto-start when run as the entrypoint (not when imported by a unit test,
+// which would otherwise trigger config load + Firebase sign-in on import).
+const isEntrypoint =
+  typeof process.argv[1] === 'string' &&
+  import.meta.url === pathToFileURL(process.argv[1]).href;
+if (isEntrypoint) {
+  main().catch((e) => {
+    console.error('[agent] fatal:', e);
+    process.exit(1);
+  });
+}
