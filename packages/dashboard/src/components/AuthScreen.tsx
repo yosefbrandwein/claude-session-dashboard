@@ -4,10 +4,11 @@ import { USE_EMULATORS } from '../firebase';
 interface Props {
   onSignIn: (email: string, password: string) => Promise<void>;
   onSignUp: (email: string, password: string) => Promise<void>;
+  onGoogle: () => Promise<void>;
 }
 
-/** Email/password sign-in + sign-up. Surfaces Firebase auth errors inline. */
-export function AuthScreen({ onSignIn, onSignUp }: Props) {
+/** Email/password sign-in + sign-up + Google. Surfaces Firebase auth errors inline. */
+export function AuthScreen({ onSignIn, onSignUp, onGoogle }: Props) {
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [email, setEmail] = useState(USE_EMULATORS ? 'demo@demo.dev' : '');
   const [password, setPassword] = useState(USE_EMULATORS ? 'demo123' : '');
@@ -67,6 +68,25 @@ export function AuthScreen({ onSignIn, onSignUp }: Props) {
             {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Sign up'}
           </button>
         </form>
+        <div className="auth-divider"><span>or</span></div>
+        <button
+          className="btn google"
+          type="button"
+          disabled={busy}
+          onClick={async () => {
+            setError(null);
+            setBusy(true);
+            try {
+              await onGoogle();
+            } catch (err) {
+              setError(err instanceof Error ? err.message : String(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <span className="g">G</span> Continue with Google
+        </button>
         <div className="auth-toggle">
           {mode === 'signin' ? (
             <>

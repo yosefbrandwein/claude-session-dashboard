@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useAuth } from './hooks/useAuth';
+import { useAuth, hasGoogle } from './hooks/useAuth';
 import { useSessions } from './hooks/useSessions';
 import { AuthScreen } from './components/AuthScreen';
 import { Toolbar } from './components/Toolbar';
@@ -18,7 +18,7 @@ import { USE_EMULATORS } from './firebase';
 import type { SessionStatus } from '../../../shared/src/types';
 
 export function App() {
-  const { user, initializing, signIn, signUp, logout } = useAuth();
+  const { user, initializing, signIn, signUp, signInWithGoogle, linkGoogle, logout } = useAuth();
 
   if (initializing) {
     return (
@@ -29,13 +29,15 @@ export function App() {
   }
 
   if (!user) {
-    return <AuthScreen onSignIn={signIn} onSignUp={signUp} />;
+    return <AuthScreen onSignIn={signIn} onSignUp={signUp} onGoogle={signInWithGoogle} />;
   }
 
   return (
     <Dashboard
       uid={user.uid}
       email={user.email ?? ''}
+      googleLinked={hasGoogle(user)}
+      onLinkGoogle={linkGoogle}
       onLogout={logout}
     />
   );
@@ -44,10 +46,14 @@ export function App() {
 function Dashboard({
   uid,
   email,
+  googleLinked,
+  onLinkGoogle,
   onLogout,
 }: {
   uid: string;
   email: string;
+  googleLinked: boolean;
+  onLinkGoogle: () => Promise<void>;
   onLogout: () => Promise<void>;
 }) {
   const { sessions, presenceLoaded, sessionsLoaded } = useSessions(uid);
@@ -105,6 +111,19 @@ function Dashboard({
         {USE_EMULATORS && <span className="muted">emulator</span>}
         <div className="user-chip">
           {email}
+          {!googleLinked && (
+            <button
+              className="btn ghost"
+              title="Attach Google to this account so you can sign in with Google next time (same account, same sessions)."
+              onClick={() =>
+                void onLinkGoogle().catch((e) =>
+                  setToast(e instanceof Error ? e.message : String(e)),
+                )
+              }
+            >
+              Link Google
+            </button>
+          )}
           <button className="btn ghost" onClick={() => void onLogout()}>
             Sign out
           </button>
