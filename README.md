@@ -129,11 +129,17 @@ everything is `firebase deploy`.
 
 ## How to add a NEW device
 
-On any other machine you use Claude Code:
-1. Clone this repo, `npm install` in `packages/agent`.
-2. Create `~/.claude-dash/config.json` with the **same user's** email/password (so it shares your `uid`).
-3. Run the agent: `cd packages/agent && npx tsx src/index.ts`.
-4. (Optional) **Keep it always-on** so the device stays on the dashboard after you close the terminal:
+On any other Windows machine you use Claude Code:
+1. Install **Node.js** (v18+, https://nodejs.org) and get this repo onto the machine
+   (`git clone <your private repo>`).
+2. **Double-click `scripts\setup-device.cmd`.** It installs the agent's deps, prompts once for
+   your dashboard email + password (writes `~/.claude-dash/config.json`), and starts the agent.
+   Within ~5s the machine shows up as its own group on the dashboard.
+
+That's the whole thing. (macOS/Linux or manual: `npm install` in `packages/agent`, create
+`~/.claude-dash/config.json` with the same login, then `npx tsx src/index.ts`.)
+
+**Keep it always-on** so the device stays on the dashboard after you close the terminal:
    - **Windows:** register a Scheduled Task "At log on" running the agent (a `node`/`tsx` command),
      or use `pm2 start "npx tsx src/index.ts" --name csd-agent`.
    - **macOS:** a `launchd` LaunchAgent plist; **Linux:** a `systemd --user` service.
