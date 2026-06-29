@@ -53,6 +53,23 @@ echo Keep this window open to stay live (or set up auto-start - see README).
 echo Press Ctrl+C to stop.
 echo.
 cd /d "%~dp0..\packages\agent"
-node "node_modules\tsx\dist\cli.mjs" src\index.ts
+REM Resolve tsx robustly: npm workspaces hoist it to the REPO-ROOT node_modules,
+REM not packages\agent\node_modules — so use the .bin shim wherever it landed,
+REM falling back to npx. A hardcoded path breaks on a fresh clone.
+set "TSX="
+if exist "node_modules\.bin\tsx.cmd" set "TSX=node_modules\.bin\tsx.cmd"
+if not defined TSX if exist "..\..\node_modules\.bin\tsx.cmd" set "TSX=..\..\node_modules\.bin\tsx.cmd"
+if defined TSX (
+  call "%TSX%" src\index.ts
+) else (
+  call npx --yes tsx src\index.ts
+)
+
+echo.
+echo ============================================================
+echo  The agent has STOPPED. If there is an error above, copy it
+echo  and send it over. (Normally this window stays running.)
+echo ============================================================
+pause
 
 endlocal
