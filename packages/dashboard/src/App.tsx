@@ -18,7 +18,7 @@ import { USE_EMULATORS } from './firebase';
 import type { SessionStatus } from '../../../shared/src/types';
 
 export function App() {
-  const { user, initializing, signIn, signUp, signInWithGoogle, linkGoogle, logout } = useAuth();
+  const { user, initializing, signIn, signUp, signInWithGoogle, linkGoogle, setAgentPassword, logout } = useAuth();
 
   if (initializing) {
     return (
@@ -38,6 +38,7 @@ export function App() {
       email={user.email ?? ''}
       googleLinked={hasGoogle(user)}
       onLinkGoogle={linkGoogle}
+      onSetAgentPassword={setAgentPassword}
       onLogout={logout}
     />
   );
@@ -48,12 +49,14 @@ function Dashboard({
   email,
   googleLinked,
   onLinkGoogle,
+  onSetAgentPassword,
   onLogout,
 }: {
   uid: string;
   email: string;
   googleLinked: boolean;
   onLinkGoogle: () => Promise<void>;
+  onSetAgentPassword: (pw: string) => Promise<void>;
   onLogout: () => Promise<void>;
 }) {
   const { sessions, presenceLoaded, sessionsLoaded } = useSessions(uid);
@@ -111,6 +114,22 @@ function Dashboard({
         {USE_EMULATORS && <span className="muted">emulator</span>}
         <div className="user-chip">
           {email}
+          <button
+            className="btn ghost"
+            title="Set the password the headless agent uses (put it in ~/.claude-dash/config.json). Works even if this account is Google-only."
+            onClick={() => {
+              const pw = window.prompt(
+                'Set a password for the agent on this account.\nPut the SAME value in ~/.claude-dash/config.json on each device.\n(min 6 characters)',
+              );
+              if (!pw) return;
+              if (pw.length < 6) { setToast('Password must be at least 6 characters.'); return; }
+              void onSetAgentPassword(pw)
+                .then(() => setToast('Agent password set ✓ — put it in ~/.claude-dash/config.json and restart the agent.'))
+                .catch((e) => setToast(e instanceof Error ? e.message : String(e)));
+            }}
+          >
+            Set agent password
+          </button>
           {!googleLinked && (
             <button
               className="btn ghost"

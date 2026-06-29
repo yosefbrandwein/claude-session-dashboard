@@ -5,6 +5,9 @@ import {
   signInWithEmailAndPassword,
   signInWithPopup,
   linkWithPopup,
+  linkWithCredential,
+  updatePassword,
+  EmailAuthProvider,
   GoogleAuthProvider,
   signOut,
   type User,
@@ -30,6 +33,7 @@ export function useAuth(): AuthState & {
   signUp: (email: string, password: string) => Promise<void>;
   signInWithGoogle: () => Promise<void>;
   linkGoogle: () => Promise<void>;
+  setAgentPassword: (newPassword: string) => Promise<void>;
   logout: () => Promise<void>;
 } {
   const [user, setUser] = useState<User | null>(null);
@@ -72,6 +76,25 @@ export function useAuth(): AuthState & {
     linkGoogle: async () => {
       if (!auth.currentUser) throw new Error('Sign in first, then link Google.');
       await linkWithPopup(auth.currentUser, googleProvider);
+    },
+    // Give the currently signed-in account a password (for the headless agent).
+    // If the account has no password provider (e.g. it's Google-only because a
+    // Google sign-in overwrote an unverified password account), link one; if it
+    // already has one, update it. Either way the agent can then sign in with
+    // email + this password as the SAME uid this user is signed in as.
+    setAgentPassword: async (newPassword: string) => {
+      const u = auth.currentUser;
+      if (!u || !u.email) throw new Error('Sign in (e.g. with Google) first.');
+      const cred = EmailAuthProvider.credential(u.email, newPassword);
+      try {
+        await linkWithCredential(u, cred);
+      } catch (err: any) {
+        if (err?.code === 'auth/provider-already-linked' || err?.code === 'auth/email-already-in-use') {
+          await updatePassword(u, newPassword); // password provider exists → just set it
+        } else {
+          throw err;
+        }
+      }
     },
     logout: async () => {
       await signOut(auth);
