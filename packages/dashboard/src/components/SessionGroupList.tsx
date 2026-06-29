@@ -12,6 +12,7 @@ interface Props {
   now: number;
   selectedKey: string | null;
   onSelect: (s: MergedSession) => void;
+  onDismiss: (s: MergedSession) => void;
 }
 
 export function SessionGroupList({
@@ -20,6 +21,7 @@ export function SessionGroupList({
   now,
   selectedKey,
   onSelect,
+  onDismiss,
 }: Props) {
   // Collapsed groups tracked by key; default expanded.
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
@@ -67,6 +69,7 @@ export function SessionGroupList({
                         now={now}
                         selected={s.key === selectedKey}
                         onClick={() => onSelect(s)}
+                        onDismiss={() => onDismiss(s)}
                       />
                     ))}
                   </div>

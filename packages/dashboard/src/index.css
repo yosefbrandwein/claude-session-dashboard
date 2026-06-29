@@ -453,6 +453,36 @@ button {
   gap: 8px;
   margin-bottom: 10px;
 }
+.card-dismiss {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 2;
+  width: 22px;
+  height: 22px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--text-faint);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.12s, background 0.12s, color 0.12s;
+}
+.card:hover .card-dismiss {
+  opacity: 1;
+}
+.card-dismiss:hover {
+  background: var(--st-attention, #c0392b);
+  color: #fff;
+}
+.clear-finished {
+  white-space: nowrap;
+}
 .card-titleblock {
   min-width: 0;
   flex: 1;

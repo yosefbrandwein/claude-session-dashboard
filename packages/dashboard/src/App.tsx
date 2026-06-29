@@ -16,7 +16,9 @@ import {
   type SortMode,
 } from './util';
 import { USE_EMULATORS } from './firebase';
+import { dismissSession, dismissSessions } from './dismiss';
 import type { SessionStatus } from '../../../shared/src/types';
+import type { MergedSession } from './model';
 
 export function App() {
   const { user, initializing, signIn, signUp, signInWithGoogle, linkGoogle, setAgentPassword, logout } = useAuth();
@@ -113,6 +115,33 @@ function Dashboard({
 
   const totalActive = activeCount(sessions);
   const devices = deviceCount(sessions);
+  const finished = useMemo(
+    () => sessions.filter((s) => s.status === 'stale' || s.status === 'ended'),
+    [sessions],
+  );
+
+  const handleDismiss = (s: MergedSession) => {
+    if (selectedKey === s.key) setSelectedKey(null);
+    void dismissSession(uid, s)
+      .then(() => setToast('Session dismissed.'))
+      .catch((e) => setToast(e instanceof Error ? e.message : String(e)));
+  };
+
+  const handleClearFinished = () => {
+    if (finished.length === 0) return;
+    const n = finished.length;
+    if (
+      !window.confirm(
+        `Dismiss ${n} finished session${n === 1 ? '' : 's'}? This removes them (and their cloud ` +
+          `metadata) from the dashboard. Your local Claude history is untouched.`,
+      )
+    )
+      return;
+    if (selectedKey && finished.some((s) => s.key === selectedKey)) setSelectedKey(null);
+    void dismissSessions(uid, finished)
+      .then((done) => setToast(`Dismissed ${done} finished session${done === 1 ? '' : 's'}.`))
+      .catch((e) => setToast(e instanceof Error ? e.message : String(e)));
+  };
 
   return (
     <div className="shell">
@@ -128,6 +157,15 @@ function Dashboard({
             <> · {sessions.length} total</>
           )}
         </div>
+        {finished.length > 0 && (
+          <button
+            className="btn ghost clear-finished"
+            title="Dismiss all finished (stale/ended) sessions"
+            onClick={handleClearFinished}
+          >
+            Clear finished ({finished.length})
+          </button>
+        )}
         <div className="spacer" />
         {USE_EMULATORS && <span className="muted">emulator</span>}
         <div className="user-chip">
@@ -204,6 +242,7 @@ function Dashboard({
             now={now}
             selectedKey={selectedKey}
             onSelect={(s) => setSelectedKey(s.key)}
+            onDismiss={handleDismiss}
           />
         )}
       </main>

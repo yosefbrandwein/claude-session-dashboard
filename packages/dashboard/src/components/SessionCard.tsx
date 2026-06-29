@@ -9,6 +9,8 @@ interface Props {
   now: number;
   selected: boolean;
   onClick: () => void;
+  /** Remove a finished session from the dashboard (only shown for stale/ended). */
+  onDismiss?: () => void;
 }
 
 const STATUS_COLOR_VAR: Record<string, string> = {
@@ -20,7 +22,8 @@ const STATUS_COLOR_VAR: Record<string, string> = {
   ended: 'var(--st-ended)',
 };
 
-export function SessionCard({ session: s, now, selected, onClick }: Props) {
+export function SessionCard({ session: s, now, selected, onClick, onDismiss }: Props) {
+  const finished = s.status === 'stale' || s.status === 'ended';
   // Relative-time rendering is driven by App's shared `now` clock (passed as a
   // prop) so a single timer ticks every card instead of one interval per card.
 
@@ -45,6 +48,19 @@ export function SessionCard({ session: s, now, selected, onClick }: Props) {
         className="accent-bar"
         style={{ background: STATUS_COLOR_VAR[s.status] ?? 'var(--st-stale)' }}
       />
+      {finished && onDismiss && (
+        <button
+          className="card-dismiss"
+          title="Dismiss this finished session (removes it from the dashboard)"
+          aria-label="Dismiss session"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss();
+          }}
+        >
+          ✕
+        </button>
+      )}
       <div className="card-head">
         <div className="card-titleblock">
           <div className="title" title={s.title ?? s.project}>
