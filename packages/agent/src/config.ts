@@ -11,6 +11,8 @@ import * as path from 'node:path';
 export interface AgentConfig {
   email: string;
   password: string;
+  /** Friendly name shown on the dashboard for this device (else hostname). */
+  deviceName?: string;
   /** content-capture opt-in: when false (default) message `text` is never stored. */
   captureContent: boolean;
   /** ms between presence ticks. */
@@ -31,7 +33,9 @@ export function configDir(): string {
   return process.env.CSD_CONFIG_DIR ?? path.join(os.homedir(), '.claude-dash');
 }
 
-async function readConfigFile(): Promise<Partial<{ email: string; password: string; captureContent: boolean }>> {
+async function readConfigFile(): Promise<
+  Partial<{ email: string; password: string; captureContent: boolean; deviceName: string }>
+> {
   const file = path.join(configDir(), 'config.json');
   try {
     return JSON.parse(await fs.readFile(file, 'utf8'));
@@ -55,9 +59,12 @@ export async function loadConfig(): Promise<AgentConfig> {
   const commandMode: AgentConfig['commandMode'] =
     rawMode === 'off' || rawMode === 'full' ? rawMode : 'safe';
 
+  const deviceName = (process.env.CSD_DEVICE_NAME ?? fromFile.deviceName ?? '').trim() || undefined;
+
   return {
     email,
     password,
+    deviceName,
     captureContent:
       process.env.CSD_CAPTURE_CONTENT === '1' || fromFile.captureContent === true,
     presenceIntervalMs: Number(process.env.CSD_PRESENCE_INTERVAL_MS ?? 5000),

@@ -3,7 +3,7 @@ import { onValue, ref } from 'firebase/database';
 import { collection, onSnapshot } from 'firebase/firestore';
 import { db, rtdb } from '../firebase';
 import { mergeSessions, type MergedSession } from '../model';
-import type { PresenceRecord, SessionDoc } from '../../../../shared/src/types';
+import type { PresenceRecord, SessionDoc, DeviceDoc } from '../../../../shared/src/types';
 
 /** Shape of the RTDB subtree at /presence/{uid}: deviceId → sessionId → record. */
 type PresenceTree = Record<string, Record<string, PresenceRecord>>;
@@ -24,6 +24,7 @@ export function useSessions(uid: string | null): {
 } {
   const [presence, setPresence] = useState<PresenceTree>({});
   const [sessionDocs, setSessionDocs] = useState<SessionDoc[]>([]);
+  const [deviceDocs, setDeviceDocs] = useState<DeviceDoc[]>([]);
   const [presenceLoaded, setPresenceLoaded] = useState(false);
   const [sessionsLoaded, setSessionsLoaded] = useState(false);
   // Ticks once a second purely to re-evaluate heartbeat-based staleness.
@@ -38,6 +39,7 @@ export function useSessions(uid: string | null): {
     if (!uid) {
       setPresence({});
       setSessionDocs([]);
+      setDeviceDocs([]);
       setPresenceLoaded(false);
       setSessionsLoaded(false);
       return;
@@ -55,15 +57,28 @@ export function useSessions(uid: string | null): {
       setSessionsLoaded(true);
     });
 
+    const devicesCol = collection(db, 'users', uid, 'devices');
+    const unsubDevices = onSnapshot(devicesCol, (snap) => {
+      setDeviceDocs(snap.docs.map((d) => d.data() as DeviceDoc));
+    });
+
     return () => {
       unsubPresence();
       unsubSessions();
+      unsubDevices();
     };
   }, [uid]);
 
+  // deviceId → friendly name (configured name, else hostname).
+  const deviceNames = useMemo(() => {
+    const m: Record<string, string> = {};
+    for (const d of deviceDocs) m[d.deviceId] = d.name || d.hostname || d.deviceId;
+    return m;
+  }, [deviceDocs]);
+
   const sessions = useMemo(
-    () => mergeSessions(presence, sessionDocs, nowTick),
-    [presence, sessionDocs, nowTick],
+    () => mergeSessions(presence, sessionDocs, nowTick, deviceNames),
+    [presence, sessionDocs, nowTick, deviceNames],
   );
 
   return { sessions, presenceLoaded, sessionsLoaded };

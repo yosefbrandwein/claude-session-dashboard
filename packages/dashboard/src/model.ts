@@ -20,6 +20,8 @@ export interface MergedSession {
   key: string;            // `${deviceId}::${sessionId}`
   sessionId: string;
   deviceId: string;
+  /** Friendly device label (configured name or hostname); falls back to deviceId. */
+  deviceName: string;
   /** Human-readable session title (Claude "Recents" name); null if unknown. */
   title: string | null;
   project: string;
@@ -60,7 +62,10 @@ export function mergeSessions(
   presenceByDevice: Record<string, Record<string, PresenceRecord>>,
   sessionDocs: SessionDoc[],
   now: number,
+  /** deviceId → friendly display name (configured name or hostname). */
+  deviceNames: Record<string, string> = {},
 ): MergedSession[] {
+  const nameOf = (deviceId: string) => deviceNames[deviceId] || deviceId;
   const docByKey = new Map<string, SessionDoc>();
   for (const d of sessionDocs) {
     docByKey.set(`${d.deviceId}::${d.sessionId}`, d);
@@ -95,6 +100,7 @@ export function mergeSessions(
         key,
         sessionId,
         deviceId,
+        deviceName: nameOf(deviceId),
         title: doc?.title ?? null,
         project: rec.project || doc?.project || 'unknown',
         branch: rec.branch ?? doc?.gitBranch ?? null,
@@ -121,6 +127,7 @@ export function mergeSessions(
       key,
       sessionId: d.sessionId,
       deviceId: d.deviceId,
+      deviceName: nameOf(d.deviceId),
       title: d.title,
       project: d.project,
       branch: d.gitBranch,

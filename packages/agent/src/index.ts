@@ -228,7 +228,8 @@ async function main(): Promise<void> {
   console.log(`[agent] command mode: ${modeNote}`);
 
   const firstSeen = Date.now();
-  await upsertDevice(uid, deviceDoc(Date.now(), firstSeen, AGENT_VERSION));
+  await upsertDevice(uid, deviceDoc(Date.now(), firstSeen, AGENT_VERSION, cfg.deviceName));
+  if (cfg.deviceName) console.log(`[agent] device name: ${cfg.deviceName}`);
 
   // Command listener (Firestore onSnapshot).
   const unsub = listenForCommands({

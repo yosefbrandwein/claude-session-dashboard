@@ -30,6 +30,8 @@ export interface PresenceRecord {
 export interface DeviceDoc {
   deviceId: string;       // stable per machine (hostname hash)
   hostname: string;
+  /** Friendly display name (CSD_DEVICE_NAME / config.deviceName); falls back to hostname. */
+  name?: string;
   os: string;             // 'win32' | 'darwin' | 'linux'
   agentVersion: string;
   firstSeen: number;

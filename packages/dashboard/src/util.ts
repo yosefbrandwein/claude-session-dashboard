@@ -93,7 +93,7 @@ export function filterSessions(
   return sessions.filter((s) => {
     if (statusFilter !== 'all' && s.status !== statusFilter) return false;
     if (q) {
-      const hay = `${s.project} ${s.branch ?? ''} ${s.deviceId}`.toLowerCase();
+      const hay = `${s.project} ${s.branch ?? ''} ${s.deviceName} ${s.deviceId}`.toLowerCase();
       if (!hay.includes(q)) return false;
     }
     return true;
@@ -128,35 +128,46 @@ export function groupSessions(
     ];
   }
 
-  const primaryOf = (s: MergedSession) =>
+  // GROUP by a stable KEY (deviceId / project) but DISPLAY a friendly LABEL
+  // (deviceName / project). Two machines with the same friendly name still stay
+  // separate groups because the key is the deviceId.
+  const primaryKeyOf = (s: MergedSession) =>
     mode === 'device-project' ? s.deviceId : s.project;
-  const secondaryOf = (s: MergedSession) =>
+  const primaryLabelOf = (s: MergedSession) =>
+    mode === 'device-project' ? s.deviceName : s.project;
+  const secondaryKeyOf = (s: MergedSession) =>
     mode === 'device-project' ? s.project : s.deviceId;
+  const secondaryLabelOf = (s: MergedSession) =>
+    mode === 'device-project' ? s.project : s.deviceName;
 
   const byPrimary = new Map<string, MergedSession[]>();
   for (const s of sessions) {
-    const p = primaryOf(s);
+    const p = primaryKeyOf(s);
     if (!byPrimary.has(p)) byPrimary.set(p, []);
     byPrimary.get(p)!.push(s);
   }
 
   const groups: SessionGroup[] = [];
-  for (const [primary, list] of [...byPrimary.entries()].sort((a, b) =>
-    a[0].localeCompare(b[0]),
+  for (const [primaryKey, list] of [...byPrimary.entries()].sort((a, b) =>
+    primaryLabelOf(a[1][0]).localeCompare(primaryLabelOf(b[1][0])),
   )) {
     const bySecondary = new Map<string, MergedSession[]>();
     for (const s of list) {
-      const sec = secondaryOf(s);
+      const sec = secondaryKeyOf(s);
       if (!bySecondary.has(sec)) bySecondary.set(sec, []);
       bySecondary.get(sec)!.push(s);
     }
     const subgroups = [...bySecondary.entries()]
-      .sort((a, b) => a[0].localeCompare(b[0]))
-      .map(([label, sub]) => ({ key: `${primary}::${label}`, label, sessions: sub }));
+      .sort((a, b) => secondaryLabelOf(a[1][0]).localeCompare(secondaryLabelOf(b[1][0])))
+      .map(([secKey, sub]) => ({
+        key: `${primaryKey}::${secKey}`,
+        label: secondaryLabelOf(sub[0]),
+        sessions: sub,
+      }));
 
     groups.push({
-      key: primary,
-      primary,
+      key: primaryKey,
+      primary: primaryLabelOf(list[0]),
       subgroups,
       sessions: list,
       allStale: list.length > 0 && list.every((s) => s.deviceStale),

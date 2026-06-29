@@ -14,10 +14,16 @@ export function deviceId(): string {
   return crypto.createHash('sha256').update(os.hostname()).digest('hex').slice(0, 16);
 }
 
-export function deviceDoc(now: number, firstSeen: number, agentVersion: string): DeviceDoc {
+export function deviceDoc(
+  now: number,
+  firstSeen: number,
+  agentVersion: string,
+  name?: string,
+): DeviceDoc {
   return {
     deviceId: deviceId(),
     hostname: os.hostname(),
+    ...(name ? { name } : {}),
     os: process.platform,
     agentVersion,
     firstSeen,

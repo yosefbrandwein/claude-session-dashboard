@@ -76,7 +76,7 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
           <div style={{ flex: 1 }}>
             <div className="ttl">{s.project}</div>
             <div className="sub">
-              {s.deviceId} · {s.branch ?? 'no branch'}
+              {s.deviceName} · {s.branch ?? 'no branch'}
             </div>
           </div>
           <StatusPill status={s.status} />
