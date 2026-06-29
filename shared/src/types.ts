@@ -40,6 +40,8 @@ export interface DeviceDoc {
 export interface SessionDoc {
   sessionId: string;
   deviceId: string;
+  /** Human-readable session title (Claude's auto-generated "Recents" name); null if unknown. */
+  title: string | null;
   project: string;
   cwd: string;
   gitBranch: string | null;

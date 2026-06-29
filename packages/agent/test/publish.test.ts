@@ -41,6 +41,7 @@ function baseDoc(): SessionDoc {
   return {
     sessionId: 's1',
     deviceId: 'dev1',
+    title: 'My session',
     project: 'proj',
     cwd: 'C:/x/proj',
     gitBranch: 'main',
@@ -66,6 +67,7 @@ test('stableSessionDocJson is independent of key insertion order (F1)', () => {
     controllable: a.controllable,
     messageCount: a.messageCount,
     status: a.status,
+    title: a.title,
     entrypoint: a.entrypoint,
     version: a.version,
     model: a.model,

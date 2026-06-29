@@ -20,6 +20,8 @@ export interface MergedSession {
   key: string;            // `${deviceId}::${sessionId}`
   sessionId: string;
   deviceId: string;
+  /** Human-readable session title (Claude "Recents" name); null if unknown. */
+  title: string | null;
   project: string;
   branch: string | null;
   /** Effective status after reconciling presence heartbeat against the clock. */
@@ -93,6 +95,7 @@ export function mergeSessions(
         key,
         sessionId,
         deviceId,
+        title: doc?.title ?? null,
         project: rec.project || doc?.project || 'unknown',
         branch: rec.branch ?? doc?.gitBranch ?? null,
         status: effectiveStatus(rec.status, rec.heartbeatAt, now),
@@ -118,6 +121,7 @@ export function mergeSessions(
       key,
       sessionId: d.sessionId,
       deviceId: d.deviceId,
+      title: d.title,
       project: d.project,
       branch: d.gitBranch,
       // No presence heartbeat → fall back to the doc's own status, but a

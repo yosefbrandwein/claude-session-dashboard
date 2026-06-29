@@ -406,6 +406,37 @@ button {
   gap: 8px;
   margin-bottom: 10px;
 }
+.card-titleblock {
+  min-width: 0;
+  flex: 1;
+}
+.card .title {
+  font-weight: 650;
+  font-size: 14px;
+  line-height: 1.3;
+  color: var(--text);
+  /* clamp long titles to two lines */
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  word-break: break-word;
+}
+.card .subline {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 3px;
+}
+.card .project-sub {
+  font-size: 11px;
+  color: var(--text-dim);
+  font-family: var(--mono, ui-monospace, monospace);
+}
+.card .subline .branch-chip {
+  margin-top: 0;
+}
 .card .project {
   font-weight: 600;
   font-size: 14px;

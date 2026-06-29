@@ -109,10 +109,12 @@ export function toSessionDoc(
   gitBranch: string | null,
   model: string | null,
   controllable: boolean,
+  title: string | null = null,
 ): SessionDoc {
   return {
     sessionId: c.parsed.sessionId,
     deviceId,
+    title,
     project: c.project,
     cwd: c.parsed.cwd,
     gitBranch,

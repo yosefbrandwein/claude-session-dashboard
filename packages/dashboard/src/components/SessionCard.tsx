@@ -46,14 +46,19 @@ export function SessionCard({ session: s, now, selected, onClick }: Props) {
         style={{ background: STATUS_COLOR_VAR[s.status] ?? 'var(--st-stale)' }}
       />
       <div className="card-head">
-        <div>
-          <div className="project">{s.project}</div>
-          {s.branch && (
-            <span className="branch-chip" title={s.branch}>
-              <span className="git">⎇</span>
-              {s.branch}
-            </span>
-          )}
+        <div className="card-titleblock">
+          <div className="title" title={s.title ?? s.project}>
+            {s.title ?? s.project}
+          </div>
+          <div className="subline">
+            {s.title && <span className="project-sub">{s.project}</span>}
+            {s.branch && (
+              <span className="branch-chip" title={s.branch}>
+                <span className="git">⎇</span>
+                {s.branch}
+              </span>
+            )}
+          </div>
         </div>
         <StatusPill status={s.status} />
       </div>

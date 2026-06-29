@@ -15,6 +15,7 @@ import { deviceId, deviceDoc, gitBranch } from './device';
 import { collectOnce, toPresenceRecord, toSessionDoc, type CollectedSession } from './collector/collect';
 import { findTranscriptPath, readTranscriptEntriesFrom } from './collector/io';
 import { parseTranscriptEntry, parsePermissionDenial } from './collector/parse';
+import { getSessionTitle } from './collector/titles';
 import {
   upsertDevice,
   publishPresence,
@@ -90,7 +91,9 @@ async function tick(uid: string): Promise<void> {
     //    controllableHint now reflects Tier-A eligibility (F11, computed in
     //    collect.ts: live + has sessionId), not the infeasible Tier B hint.
     const isTerminal = c.status === 'stale' || c.status === 'ended';
-    const session = toSessionDoc(c, dev, st.branch, st.model, c.controllableHint);
+    // Human-readable title from the desktop app's "Recents" store (best-effort).
+    const title = await getSessionTitle(sid, now);
+    const session = toSessionDoc(c, dev, st.branch, st.model, c.controllableHint, title);
     const sessionJson = stableSessionDocJson(session);
     if (isTerminal && st.terminalWritten) {
       // already flushed the terminal doc once — nothing more to write.
