@@ -1,26 +1,13 @@
 import type { GroupMode, SortMode } from '../util';
-import { STATUS_LABEL } from '../model';
-import type { SessionStatus } from '../../../../shared/src/types';
 
 interface Props {
   group: GroupMode;
   setGroup: (g: GroupMode) => void;
   sort: SortMode;
   setSort: (s: SortMode) => void;
-  statusFilter: SessionStatus | 'all';
-  setStatusFilter: (s: SessionStatus | 'all') => void;
   search: string;
   setSearch: (s: string) => void;
 }
-
-const STATUSES: SessionStatus[] = [
-  'working',
-  'idle',
-  'awaiting-input',
-  'needs-attention',
-  'stale',
-  'ended',
-];
 
 export function Toolbar(p: Props) {
   return (
@@ -52,24 +39,6 @@ export function Toolbar(p: Props) {
         value={p.search}
         onChange={(e) => p.setSearch(e.target.value)}
       />
-
-      <label className="field">
-        Status
-        <select
-          className="select"
-          value={p.statusFilter}
-          onChange={(e) =>
-            p.setStatusFilter(e.target.value as SessionStatus | 'all')
-          }
-        >
-          <option value="all">All</option>
-          {STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_LABEL[s]}
-            </option>
-          ))}
-        </select>
-      </label>
 
       <label className="field">
         Sort

@@ -3,6 +3,7 @@ import { useAuth, hasGoogle } from './hooks/useAuth';
 import { useSessions } from './hooks/useSessions';
 import { AuthScreen } from './components/AuthScreen';
 import { Toolbar } from './components/Toolbar';
+import { StatusFilterBar } from './components/StatusFilterBar';
 import { SessionGroupList } from './components/SessionGroupList';
 import { SessionDetail } from './components/SessionDetail';
 import {
@@ -86,6 +87,23 @@ function Dashboard({
     return sortSessions(filtered, sort);
   }, [sessions, statusFilter, search, sort]);
 
+  // Per-state counts for the filter chips — reflect the search box but NOT the
+  // status filter itself, so each chip shows how many match regardless of which
+  // state is currently selected.
+  const statusCounts = useMemo(() => {
+    const searched = filterSessions(sessions, 'all', search);
+    const counts: Record<SessionStatus, number> = {
+      working: 0,
+      idle: 0,
+      'awaiting-input': 0,
+      'needs-attention': 0,
+      stale: 0,
+      ended: 0,
+    };
+    for (const s of searched) counts[s.status]++;
+    return { counts, total: searched.length };
+  }, [sessions, search]);
+
   const groups = useMemo(() => groupSessions(visible, group), [visible, group]);
 
   const selected = useMemo(
@@ -154,10 +172,15 @@ function Dashboard({
         setGroup={setGroup}
         sort={sort}
         setSort={setSort}
-        statusFilter={statusFilter}
-        setStatusFilter={setStatusFilter}
         search={search}
         setSearch={setSearch}
+      />
+
+      <StatusFilterBar
+        counts={statusCounts.counts}
+        total={statusCounts.total}
+        value={statusFilter}
+        onChange={setStatusFilter}
       />
 
       <main className="content">
