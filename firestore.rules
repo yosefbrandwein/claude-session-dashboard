@@ -47,21 +47,21 @@ service cloud.firestore {
           && (!('payload' in request.resource.data)
               || !('reqId' in request.resource.data.payload)
               || request.resource.data.payload.reqId.size() <= 200);
-        // Updates are how the agent acks/completes a command. Re-assert the
-        // invariants and FREEZE identity fields so a client can't create a
-        // benign command then mutate it into an arbitrary type / oversized
-        // payload, bypassing the create-time validation (F8).
+        // Updates are how the agent acks/completes a command. FREEZE every
+        // security-relevant field — type, sessionId, the executable payload, and
+        // createdAt — so a client (or a stolen token) cannot:
+        //   • create a benign command then swap payload.text into a malicious
+        //     prompt after any human/log review (payload-swap-after-review), or
+        //   • re-arm a finished command back to 'pending' to make the agent's
+        //     listener RE-EXECUTE it (replay / quota-amplification).
+        // Status is a forward-only machine: pending → acked → done|error; an
+        // update may NEVER set 'pending'.
         allow update: if isOwner(uid)
           && request.resource.data.type == resource.data.type
           && request.resource.data.sessionId == resource.data.sessionId
-          && request.resource.data.status in ['pending','acked','done','error']
-          && request.resource.data.sessionId.size() <= 200
-          && (!('payload' in request.resource.data)
-              || !('text' in request.resource.data.payload)
-              || request.resource.data.payload.text.size() <= 8000)
-          && (!('payload' in request.resource.data)
-              || !('reqId' in request.resource.data.payload)
-              || request.resource.data.payload.reqId.size() <= 200);
+          && request.resource.data.get('payload', {}) == resource.data.get('payload', {})
+          && request.resource.data.get('createdAt', 0) == resource.data.get('createdAt', 0)
+          && request.resource.data.status in ['acked', 'done', 'error'];
       }
     }
   }

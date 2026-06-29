@@ -156,6 +156,11 @@ dashboard grouped under that device + its project. Closing the session clears it
 ---
 
 ## Security model
+> ⚠️ **Read [SECURITY.md](SECURITY.md)** — the `sendMessage` channel can run Claude on your machine,
+> so it's an RCE surface. By default it's **sandboxed** (no Bash/Write/Edit/network) and gated by
+> `CSD_COMMAND_MODE`. There are a few **console steps on you** (strong password, MFA, App Check,
+> email-enumeration protection). SECURITY.md has the full threat model, what's hardened, and what's left.
+
 - **Multi-tenant by construction:** every path is under `users/{uid}` / `presence/{uid}`; Security
   Rules allow access only when `request.auth.uid == uid`. Proven by the rules tests (Alice can't read
   Bob).

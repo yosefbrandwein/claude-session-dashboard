@@ -54,6 +54,29 @@ test('F8: changing the sessionId on update is DENIED', async () => {
   await assertFails(updateDoc(doc(d, `users/${ALICE}/commands/c4`), { sessionId: 's2' }));
 });
 
+// --- Security hardening: payload/status freeze (replay + payload-swap) ------
+test('HARDEN: re-arming a finished command back to pending is DENIED (replay block)', async () => {
+  const d = db(ALICE);
+  await assertSucceeds(setDoc(doc(d, `users/${ALICE}/commands/r1`), { type: 'sendMessage', sessionId: 's1', status: 'pending', payload: { text: 'hi' }, createdAt: 1 }));
+  await assertSucceeds(updateDoc(doc(d, `users/${ALICE}/commands/r1`), { status: 'done', result: 'ok' }));
+  // status may not transition back to 'pending' → no re-execution
+  await assertFails(updateDoc(doc(d, `users/${ALICE}/commands/r1`), { status: 'pending' }));
+});
+
+test('HARDEN: swapping payload.text after create is DENIED (payload frozen)', async () => {
+  const d = db(ALICE);
+  await assertSucceeds(setDoc(doc(d, `users/${ALICE}/commands/r2`), { type: 'sendMessage', sessionId: 's1', status: 'pending', payload: { text: 'benign' }, createdAt: 1 }));
+  // valid length, but different content — must still be rejected (frozen)
+  await assertFails(updateDoc(doc(d, `users/${ALICE}/commands/r2`), { payload: { text: 'MALICIOUS instruction' } }));
+});
+
+test('HARDEN: a normal ack/done lifecycle is still ALLOWED', async () => {
+  const d = db(ALICE);
+  await assertSucceeds(setDoc(doc(d, `users/${ALICE}/commands/r3`), { type: 'sendMessage', sessionId: 's1', status: 'pending', payload: { text: 'hi' }, createdAt: 1 }));
+  await assertSucceeds(updateDoc(doc(d, `users/${ALICE}/commands/r3`), { status: 'acked' }));
+  await assertSucceeds(updateDoc(doc(d, `users/${ALICE}/commands/r3`), { status: 'done', result: 'delivered' }));
+});
+
 // --- F9: presence shape is validated ---------------------------------------
 const validPresence = () => ({ status: 'working', project: 'p', branch: null, pid: 1, startedAt: 1, lastActivityAt: 1, heartbeatAt: 1 });
 

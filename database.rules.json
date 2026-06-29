@@ -5,11 +5,12 @@
         ".read": "auth != null && auth.uid === $uid",
         ".write": "auth != null && auth.uid === $uid",
         "$deviceId": {
+          ".validate": "$deviceId.length <= 128",
           "$sessionId": {
-            ".validate": "newData.hasChildren(['status','heartbeatAt'])",
-            "status": { ".validate": "newData.isString()" },
-            "project": { ".validate": "newData.isString()" },
-            "branch": { ".validate": "newData.isString() || newData.val() === null" },
+            ".validate": "$sessionId.length <= 128 && newData.hasChildren(['status','heartbeatAt'])",
+            "status": { ".validate": "newData.isString() && newData.val().length <= 32" },
+            "project": { ".validate": "newData.isString() && newData.val().length <= 256" },
+            "branch": { ".validate": "(newData.isString() && newData.val().length <= 256) || newData.val() === null" },
             "pid": { ".validate": "newData.isNumber()" },
             "startedAt": { ".validate": "newData.isNumber()" },
             "lastActivityAt": { ".validate": "newData.isNumber()" },

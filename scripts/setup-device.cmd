@@ -36,11 +36,15 @@ REM --- 3. login config (~/.claude-dash/config.json) -----------------------
 set "CFG=%USERPROFILE%\.claude-dash\config.json"
 if exist "%CFG%" goto :haveconfig
 echo Enter your dashboard account (same login on every device):
-set /p "EMAIL=  Email: "
-set /p "PASSWORD=  Password: "
-if not exist "%USERPROFILE%\.claude-dash" mkdir "%USERPROFILE%\.claude-dash"
-> "%CFG%" echo {"email":"!EMAIL!","password":"!PASSWORD!"}
-echo Saved login to %CFG%
+set /p "CSD_EMAIL=  Email: "
+set /p "CSD_PASSWORD=  Password: "
+REM Write config.json via node so the values are JSON-escaped correctly — a
+REM password containing a quote/backslash/ampersand can't corrupt the file or
+REM smuggle extra keys (which raw `echo {...}` would allow). Values are passed
+REM through the environment, never interpolated into the script.
+node -e "const fs=require('fs'),os=require('os'),p=require('path');const d=p.join(os.homedir(),'.claude-dash');fs.mkdirSync(d,{recursive:true});fs.writeFileSync(p.join(d,'config.json'),JSON.stringify({email:process.env.CSD_EMAIL,password:process.env.CSD_PASSWORD},null,2));console.log('Saved '+p.join(d,'config.json'));"
+if errorlevel 1 ( echo [ERROR] Failed to write config. & pause & exit /b 1 )
+set "CSD_PASSWORD="
 goto :startagent
 :haveconfig
 echo Found existing login config at %CFG%

@@ -43,6 +43,8 @@ interface SessionState {
   lastSessionDocJson: string | null;
   /** True once we've written a terminal (stale/ended) doc — write it exactly once. */
   terminalWritten: boolean;
+  /** Current Tier-A eligibility (live + resumable) — the agent-side command gate. */
+  controllable: boolean;
 }
 const state = new Map<string, SessionState>();
 // Sessions we published to presence last tick (to clear ones that vanished).
@@ -72,9 +74,12 @@ async function tick(uid: string): Promise<void> {
         cwd: c.parsed.cwd,
         lastSessionDocJson: null,
         terminalWritten: false,
+        controllable: c.controllableHint,
       };
       state.set(sid, st);
     }
+    // Keep the agent-side command-eligibility gate current each tick.
+    st.controllable = c.controllableHint;
 
     // 1) presence (skip stale — they're not "live")
     if (c.status !== 'stale' && c.status !== 'ended') {
@@ -213,6 +218,15 @@ async function main(): Promise<void> {
   const probe = await probeDaemon();
   console.log(`[agent] Tier B: ${probe.verdict}`);
 
+  // Make the security posture obvious in the logs.
+  const modeNote =
+    cfg.commandMode === 'full'
+      ? 'FULL — remote messages run with the session’s normal permissions (RCE-capable)'
+      : cfg.commandMode === 'off'
+        ? 'OFF — remote messages are ignored (observe-only)'
+        : 'SAFE — remote messages run sandboxed (no Bash/Write/Edit/network tools)';
+  console.log(`[agent] command mode: ${modeNote}`);
+
   const firstSeen = Date.now();
   await upsertDevice(uid, deviceDoc(Date.now(), firstSeen, AGENT_VERSION));
 
@@ -220,6 +234,7 @@ async function main(): Promise<void> {
   const unsub = listenForCommands({
     uid,
     captureContent: cfg.captureContent,
+    commandMode: cfg.commandMode,
     getSession: (sessionId): SessionContext | null => {
       const st = state.get(sessionId);
       if (!st) return null;
@@ -227,6 +242,7 @@ async function main(): Promise<void> {
         sessionId,
         cwd: st.cwd,
         model: st.model,
+        controllable: st.controllable,
       };
     },
   });

@@ -16,6 +16,15 @@ export interface AgentConfig {
   /** ms between presence ticks. */
   presenceIntervalMs: number;
   useEmulators: boolean;
+  /**
+   * How the agent treats dashboard `sendMessage` commands (CSD_COMMAND_MODE):
+   *  - 'off'  : ignore sendMessage entirely — observe/metadata only.
+   *  - 'safe' (DEFAULT): run sandboxed (no Bash/Write/Edit/network tools).
+   *  - 'full' : run with the session's normal permissions (RCE-capable; opt-in).
+   * This is the load-bearing control: a leaked password can only reach 'full'
+   * RCE if the operator explicitly enabled it on the device.
+   */
+  commandMode: 'off' | 'safe' | 'full';
 }
 
 export function configDir(): string {
@@ -42,6 +51,10 @@ export async function loadConfig(): Promise<AgentConfig> {
         ' with { "email": "...", "password": "..." }.',
     );
   }
+  const rawMode = (process.env.CSD_COMMAND_MODE ?? '').toLowerCase();
+  const commandMode: AgentConfig['commandMode'] =
+    rawMode === 'off' || rawMode === 'full' ? rawMode : 'safe';
+
   return {
     email,
     password,
@@ -49,5 +62,6 @@ export async function loadConfig(): Promise<AgentConfig> {
       process.env.CSD_CAPTURE_CONTENT === '1' || fromFile.captureContent === true,
     presenceIntervalMs: Number(process.env.CSD_PRESENCE_INTERVAL_MS ?? 5000),
     useEmulators: process.env.USE_FIREBASE_EMULATORS === '1',
+    commandMode,
   };
 }

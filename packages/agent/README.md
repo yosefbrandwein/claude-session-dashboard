@@ -48,6 +48,7 @@ Other env knobs:
 | `USE_FIREBASE_EMULATORS` | unset | `1` → connect to the local Emulator Suite |
 | `CSD_PRESENCE_INTERVAL_MS` | `5000` | presence/metadata tick interval |
 | `CSD_CAPTURE_CONTENT` | `0` | `1` → include raw message `text` (default OFF: metadata only) |
+| `CSD_COMMAND_MODE` | `safe` | `off` = ignore remote `sendMessage` (observe-only); `safe` = run **sandboxed** (no Bash/Write/Edit/network tools); `full` = run with the session's normal permissions (**RCE-capable; explicit opt-in**). See [SECURITY.md](../../SECURITY.md). |
 | `CSD_CONFIG_DIR` | `~/.claude-dash` | override the agent config dir |
 | `CLAUDE_HOME` | `~/.claude` | override the Claude tree (used by the read-only dry-run / hook installer tests) |
 

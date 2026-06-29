@@ -36,7 +36,7 @@ const FAKE = path.join(
   'fake-claude.mjs',
 );
 
-test('buildTierAArgs assembles the verified Tier A flags with prompt last', () => {
+test('buildTierAArgs (default=safe) sandboxes the run: forces default permission mode + denies dangerous tools, prompt last', () => {
   const args = buildTierAArgs({ sessionId: 'S', text: 'hello world', model: 'claude-opus-4-8' });
   assert.deepEqual(args, [
     '--print',
@@ -47,10 +47,24 @@ test('buildTierAArgs assembles the verified Tier A flags with prompt last', () =
     '--verbose',
     '--model',
     'claude-opus-4-8',
+    '--permission-mode',
+    'default',
+    '--disallowedTools',
+    'Bash,BashOutput,KillShell,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task,SlashCommand',
     'hello world',
   ]);
   // prompt must be the final positional arg
   assert.equal(args[args.length - 1], 'hello world');
+  // the deny list must include shell execution + file mutation
+  const deny = args[args.indexOf('--disallowedTools') + 1];
+  for (const t of ['Bash', 'Write', 'Edit', 'WebFetch']) assert.ok(deny.includes(t));
+});
+
+test('buildTierAArgs sandbox=full omits the restriction flags (explicit opt-in)', () => {
+  const args = buildTierAArgs({ sessionId: 'S', text: 'go', sandbox: 'full' });
+  assert.ok(!args.includes('--disallowedTools'), 'full mode must not deny tools');
+  assert.ok(!args.includes('--permission-mode'), 'full mode must not pin permission mode');
+  assert.equal(args[args.length - 1], 'go');
 });
 
 test('normalizeEvent extracts assistant text', () => {

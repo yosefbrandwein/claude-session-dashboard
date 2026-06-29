@@ -25,17 +25,29 @@ export interface SessionContext {
   sessionId: string;
   cwd: string;
   model: string | null;
+  /** True only if the session is currently live + resumable (agent-side gate). */
+  controllable: boolean;
 }
 
 export interface CommandRuntime {
   uid: string;
   captureContent: boolean;
+  /** Security posture for sendMessage (see AgentConfig.commandMode). */
+  commandMode: 'off' | 'safe' | 'full';
   /** Look up live context for a sessionId (null if unknown/ended). */
   getSession: (sessionId: string) => SessionContext | null;
 }
 
 /** In-flight Tier A runs by sessionId, so `interrupt` can cancel them. */
 const activeRuns = new Map<string, TierARun>();
+
+/**
+ * Command IDs we've already begun executing. Firestore's update rule allows a
+ * command to be flipped back to status:'pending', which would otherwise let an
+ * attacker REPLAY a single approved command to spawn unbounded Claude runs
+ * (quota/cost/CPU amplification). We execute each cmdId at most once per process.
+ */
+const processedCmds = new Set<string>();
 
 async function ack(uid: string, cmdId: string): Promise<void> {
   await updateDoc(doc(getDb(), paths.commands(uid), cmdId), { status: 'acked' });
@@ -71,6 +83,10 @@ export function listenForCommands(rt: CommandRuntime): Unsubscribe {
 }
 
 async function dispatch(rt: CommandRuntime, cmdId: string, cmd: CommandDoc): Promise<void> {
+  // Replay guard: never execute the same command twice, even if it's re-armed
+  // to 'pending' (see processedCmds).
+  if (processedCmds.has(cmdId)) return;
+  processedCmds.add(cmdId);
   try {
     await ack(rt.uid, cmdId);
     switch (cmd.type) {
@@ -90,6 +106,16 @@ async function dispatch(rt: CommandRuntime, cmdId: string, cmd: CommandDoc): Pro
 }
 
 async function handleSendMessage(rt: CommandRuntime, cmdId: string, cmd: CommandDoc): Promise<void> {
+  // Security gate: remote execution is opt-in. 'off' refuses to run anything.
+  if (rt.commandMode === 'off') {
+    await finish(
+      rt.uid,
+      cmdId,
+      'error',
+      'remote message execution is disabled on this device (CSD_COMMAND_MODE=off)',
+    );
+    return;
+  }
   const text = cmd.payload?.text;
   if (!text) {
     await finish(rt.uid, cmdId, 'error', 'sendMessage requires payload.text');
@@ -98,6 +124,13 @@ async function handleSendMessage(rt: CommandRuntime, cmdId: string, cmd: Command
   const ctx = rt.getSession(cmd.sessionId);
   if (!ctx) {
     await finish(rt.uid, cmdId, 'error', `unknown/ended session ${cmd.sessionId}`);
+    return;
+  }
+  // Eligibility: only drive sessions the agent currently considers controllable
+  // (live + resumable). Don't trust the dashboard's client-side gate — a forged
+  // command bypasses the disabled Send button.
+  if (!ctx.controllable) {
+    await finish(rt.uid, cmdId, 'error', `session ${cmd.sessionId} is not controllable`);
     return;
   }
 
@@ -127,6 +160,9 @@ async function runTierA(
     text,
     cwd: ctx.cwd,
     model: ctx.model ?? undefined,
+    // 'full' (explicit opt-in) runs with the session's normal permissions;
+    // otherwise the run is sandboxed (no Bash/Write/Edit/network tools).
+    sandbox: rt.commandMode === 'full' ? 'full' : 'safe',
   });
   activeRuns.set(ctx.sessionId, run);
 

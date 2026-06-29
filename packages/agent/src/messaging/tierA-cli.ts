@@ -55,6 +55,14 @@ export interface TierAOptions {
   model?: string;
   /** Override the binary (tests). Default 'claude'. */
   bin?: string;
+  /**
+   * Security posture for a dashboard-driven run:
+   *  - 'safe' (DEFAULT): deny shell/file-write/network tools so a remote message
+   *    can NEVER execute destructive actions, even if the resumed project has
+   *    them auto-approved. Claude can still read/answer.
+   *  - 'full': no restriction (explicit opt-in via CSD_COMMAND_MODE=full).
+   */
+  sandbox?: 'safe' | 'full';
   /** Extra args appended after the standard flags (e.g. ['--allowedTools','Read']). */
   extraArgs?: string[];
   /**
@@ -66,6 +74,26 @@ export interface TierAOptions {
   /** Injectable spawn (tests). Defaults to node:child_process.spawn. */
   spawnFn?: typeof nodeSpawn;
 }
+
+/**
+ * Tools a sandboxed (dashboard-driven) run is DENIED. Deny rules take precedence
+ * over any allow-list, so even a project that auto-approves `Bash(powershell *)`
+ * cannot be made to execute these via a remote message. Covers shell execution,
+ * file mutation, network/exfiltration, and sub-agent spawning.
+ */
+export const SANDBOX_DISALLOWED_TOOLS = [
+  'Bash',
+  'BashOutput',
+  'KillShell',
+  'Write',
+  'Edit',
+  'MultiEdit',
+  'NotebookEdit',
+  'WebFetch',
+  'WebSearch',
+  'Task',
+  'SlashCommand',
+];
 
 /** Build the full argv for a Tier A run (pure — unit-testable). */
 export function buildTierAArgs(opts: TierAOptions): string[] {
@@ -79,6 +107,15 @@ export function buildTierAArgs(opts: TierAOptions): string[] {
     '--verbose', // required for stream-json to emit per-event lines
   );
   if (opts.model) args.push('--model', opts.model);
+  // SECURITY (default): a dashboard-driven run is SANDBOXED. We force the
+  // non-bypassing 'default' permission mode (so a resumed session can't carry a
+  // bypassPermissions posture) and deny the destructive tool set. This turns the
+  // sendMessage primitive from "arbitrary RCE" into "read-only assistant" unless
+  // the operator explicitly opts the whole agent into CSD_COMMAND_MODE=full.
+  if (opts.sandbox !== 'full') {
+    args.push('--permission-mode', 'default');
+    args.push('--disallowedTools', SANDBOX_DISALLOWED_TOOLS.join(','));
+  }
   if (opts.extraArgs) args.push(...opts.extraArgs);
   // The prompt is passed positionally LAST so it isn't mistaken for a flag value.
   args.push(opts.text);
