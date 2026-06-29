@@ -31,6 +31,8 @@ export interface SessionContext {
 
 export interface CommandRuntime {
   uid: string;
+  /** This agent's device id — commands bound to another device are ignored. */
+  deviceId: string;
   captureContent: boolean;
   /** Security posture for sendMessage (see AgentConfig.commandMode). */
   commandMode: 'off' | 'safe' | 'full';
@@ -76,6 +78,13 @@ export function listenForCommands(rt: CommandRuntime): Unsubscribe {
       if (change.type === 'removed') return;
       const cmd = change.doc.data() as CommandDoc;
       if (cmd.status !== 'pending') return;
+      // Device-binding: a command targets the device that owns the session. If
+      // it's for another device, IGNORE it completely — don't ack, don't run,
+      // don't error. Otherwise every device's agent would pick up every command
+      // and the ones that don't own the session would clobber the real result
+      // with "unknown/ended session". (Legacy commands without deviceId are
+      // still processed for back-compat.)
+      if (cmd.deviceId && cmd.deviceId !== rt.deviceId) return;
       // Fire-and-forget; each handler owns its own error reporting.
       void dispatch(rt, change.doc.id, cmd);
     });

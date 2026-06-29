@@ -22,7 +22,7 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
     sendMessage,
     interrupt,
     decide,
-  } = useSessionDetail(uid, s.sessionId, (status, result) =>
+  } = useSessionDetail(uid, s.sessionId, s.deviceId, (status, result) =>
     onToast(
       status === 'done'
         ? `Agent: ${result || 'done'}`
@@ -31,6 +31,9 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
   );
   const [text, setText] = useState('');
   const [sending, setSending] = useState(false);
+  // Messages only reach a session whose device has a LIVE agent. If the device is
+  // stale/offline, the command would sit unprocessed — so block + explain instead.
+  const offline = s.deviceStale || s.status === 'stale' || s.status === 'ended';
 
   const send = async () => {
     const t = text.trim();
@@ -211,10 +214,18 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
               }
             }}
           />
-          <p className="note">
-            Sends a new headless turn via <code>claude --resume</code> on this
-            conversation — it does not type into the open desktop window.
-          </p>
+          {offline ? (
+            <p className="note warn">
+              This device is offline — start its agent (run <code>scripts\install-startup.cmd</code>
+              or <code>setup-device.cmd</code>) before sending. Messages only reach a device whose
+              agent is running.
+            </p>
+          ) : (
+            <p className="note">
+              Sends a new headless turn via <code>claude --resume</code> on this
+              conversation — it does not type into the open desktop window.
+            </p>
+          )}
           <div className="compose-row">
             <button
               className="btn danger"
@@ -234,7 +245,8 @@ export function SessionDetail({ uid, session: s, now, onClose, onToast }: Props)
             <button
               className="btn primary"
               onClick={send}
-              disabled={sending || commandInFlight || !text.trim()}
+              disabled={sending || commandInFlight || !text.trim() || offline}
+              title={offline ? 'The owning device is offline' : undefined}
             >
               {sending || commandInFlight ? 'Sending…' : 'Send'}
             </button>

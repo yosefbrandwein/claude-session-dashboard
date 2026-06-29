@@ -871,6 +871,9 @@ button {
   line-height: 1.4;
   margin: 6px 0 0;
 }
+.note.warn {
+  color: var(--st-attention, #e0a83c);
+}
 .note code {
   font-size: 10.5px;
   padding: 1px 4px;

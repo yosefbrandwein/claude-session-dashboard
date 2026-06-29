@@ -82,6 +82,10 @@ export type CommandType = 'sendMessage' | 'interrupt' | 'approve' | 'deny';
 export interface CommandDoc {
   type: CommandType;
   sessionId: string;
+  /** Target device (deviceId of the session). Agents ONLY process commands for
+   *  their own device — without this, every device's agent picks up every
+   *  command and the ones that don't own the session report "unknown/ended". */
+  deviceId?: string;
   payload?: { text?: string; reqId?: string };
   status: 'pending' | 'acked' | 'done' | 'error';
   createdAt: number;

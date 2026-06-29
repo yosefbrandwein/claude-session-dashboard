@@ -233,6 +233,7 @@ async function main(): Promise<void> {
   // Command listener (Firestore onSnapshot).
   const unsub = listenForCommands({
     uid,
+    deviceId: deviceId(),
     captureContent: cfg.captureContent,
     commandMode: cfg.commandMode,
     getSession: (sessionId): SessionContext | null => {

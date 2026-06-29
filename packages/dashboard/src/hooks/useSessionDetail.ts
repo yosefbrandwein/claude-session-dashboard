@@ -39,6 +39,9 @@ export interface CommandRow extends CommandDoc {
 export function useSessionDetail(
   uid: string | null,
   sessionId: string | null,
+  /** Device that owns this session — commands are bound to it (only that
+   *  device's agent will process them). */
+  deviceId: string | null,
   /** Called once per command when it reaches a terminal state, for toasts. */
   onCommandResult?: (status: 'done' | 'error', result: string) => void,
 ): {
@@ -153,6 +156,7 @@ export function useSessionDetail(
     const cmd = {
       type,
       sessionId,
+      ...(deviceId ? { deviceId } : {}),
       ...(payload ? { payload } : {}),
       status: 'pending' as const,
       // createdAt is declared as `number` in the shared contract. The agent's
