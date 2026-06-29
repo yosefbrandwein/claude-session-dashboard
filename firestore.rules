@@ -9,12 +9,42 @@ service cloud.firestore {
       return request.auth != null && request.auth.uid == uid;
     }
 
+    // Shape-validate a NEW command: known type, pending, bounded sessionId +
+    // payload text/reqId. (map.size() counts KEYS, so we guard string lengths.)
+    function validCommandCreate(d) {
+      return d.type in ['sendMessage','interrupt','approve','deny']
+        && d.status == 'pending'
+        && d.sessionId is string
+        && d.sessionId.size() <= 200
+        && (!('payload' in d) || !('text' in d.payload) || d.payload.text.size() <= 8000)
+        && (!('payload' in d) || !('reqId' in d.payload) || d.payload.reqId.size() <= 200);
+    }
+    // Updates are how the agent acks/completes a command. FREEZE every
+    // security-relevant field (type, sessionId, payload, createdAt) so a client
+    // can't swap payload.text after review or re-arm a finished command back to
+    // 'pending' (replay). Status is forward-only: never back to 'pending'.
+    function validCommandUpdate(prev, next) {
+      return next.type == prev.type
+        && next.sessionId == prev.sessionId
+        && next.get('payload', {}) == prev.get('payload', {})
+        && next.get('createdAt', 0) == prev.get('createdAt', 0)
+        && next.status in ['acked','done','error'];
+    }
+
     match /users/{uid} {
       allow read, write: if isOwner(uid);
 
-      // Devices registered by this user's agents.
+      // Devices registered by this user's agents — with a PER-DEVICE command
+      // channel. Commands live here (not in a flat collection) so each agent
+      // only ever sees its OWN device's commands; an agent on another device
+      // can't pick up — and falsely error on — a command meant for this one.
       match /devices/{deviceId} {
         allow read, write: if isOwner(uid);
+        match /commands/{cmdId} {
+          allow read, delete: if isOwner(uid);
+          allow create: if isOwner(uid) && validCommandCreate(request.resource.data);
+          allow update: if isOwner(uid) && validCommandUpdate(resource.data, request.resource.data);
+        }
       }
 
       // Durable session records + their sub-collections.
@@ -28,40 +58,12 @@ service cloud.firestore {
         }
       }
 
-      // Dashboard -> agent control channel. Shape-validated so a compromised
-      // client cannot write arbitrary command types or oversized payloads.
+      // Legacy flat command channel (pre per-device). Kept for back-compat with
+      // any not-yet-updated agent; the current dashboard writes per-device above.
       match /commands/{cmdId} {
-        allow read: if isOwner(uid);
-        allow delete: if isOwner(uid);
-        allow create: if isOwner(uid)
-          && request.resource.data.type in ['sendMessage','interrupt','approve','deny']
-          && request.resource.data.status == 'pending'
-          && request.resource.data.sessionId is string
-          && request.resource.data.sessionId.size() <= 200
-          // Bound the injected message length. NOTE: map.size() returns the
-          // number of KEYS, not bytes — so guard the text STRING's length
-          // (string.size() == character count) instead.
-          && (!('payload' in request.resource.data)
-              || !('text' in request.resource.data.payload)
-              || request.resource.data.payload.text.size() <= 8000)
-          && (!('payload' in request.resource.data)
-              || !('reqId' in request.resource.data.payload)
-              || request.resource.data.payload.reqId.size() <= 200);
-        // Updates are how the agent acks/completes a command. FREEZE every
-        // security-relevant field — type, sessionId, the executable payload, and
-        // createdAt — so a client (or a stolen token) cannot:
-        //   • create a benign command then swap payload.text into a malicious
-        //     prompt after any human/log review (payload-swap-after-review), or
-        //   • re-arm a finished command back to 'pending' to make the agent's
-        //     listener RE-EXECUTE it (replay / quota-amplification).
-        // Status is a forward-only machine: pending → acked → done|error; an
-        // update may NEVER set 'pending'.
-        allow update: if isOwner(uid)
-          && request.resource.data.type == resource.data.type
-          && request.resource.data.sessionId == resource.data.sessionId
-          && request.resource.data.get('payload', {}) == resource.data.get('payload', {})
-          && request.resource.data.get('createdAt', 0) == resource.data.get('createdAt', 0)
-          && request.resource.data.status in ['acked', 'done', 'error'];
+        allow read, delete: if isOwner(uid);
+        allow create: if isOwner(uid) && validCommandCreate(request.resource.data);
+        allow update: if isOwner(uid) && validCommandUpdate(resource.data, request.resource.data);
       }
     }
   }

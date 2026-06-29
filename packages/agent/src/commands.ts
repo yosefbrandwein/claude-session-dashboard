@@ -51,26 +51,33 @@ const activeRuns = new Map<string, TierARun>();
  */
 const processedCmds = new Set<string>();
 
-async function ack(uid: string, cmdId: string): Promise<void> {
-  await updateDoc(doc(getDb(), paths.commands(uid), cmdId), { status: 'acked' });
+/** This agent's OWN per-device command collection path. */
+function cmdCol(rt: CommandRuntime): string {
+  return paths.deviceCommands(rt.uid, rt.deviceId);
+}
+
+async function ack(rt: CommandRuntime, cmdId: string): Promise<void> {
+  await updateDoc(doc(getDb(), cmdCol(rt), cmdId), { status: 'acked' });
 }
 
 async function finish(
-  uid: string,
+  rt: CommandRuntime,
   cmdId: string,
   status: 'done' | 'error',
   result: string,
 ): Promise<void> {
-  await updateDoc(doc(getDb(), paths.commands(uid), cmdId), { status, result });
+  await updateDoc(doc(getDb(), cmdCol(rt), cmdId), { status, result });
 }
 
 /**
- * Subscribe to pending commands and dispatch them. Returns an Unsubscribe.
- * Commands are processed one snapshot at a time; each doc is acked before work
- * begins so a duplicate snapshot won't double-execute (we skip non-pending).
+ * Subscribe to THIS device's pending commands and dispatch them. Commands live
+ * in a per-device collection (users/{uid}/devices/{deviceId}/commands), so an
+ * agent only ever sees commands meant for it — another device's agent can't pick
+ * up and falsely error on a command for this one. Each doc is acked before work
+ * begins so a duplicate snapshot won't double-execute.
  */
 export function listenForCommands(rt: CommandRuntime): Unsubscribe {
-  const col = collection(getDb(), paths.commands(rt.uid));
+  const col = collection(getDb(), cmdCol(rt));
   const q = query(col, where('status', '==', 'pending'));
 
   return onSnapshot(q, (snap) => {
@@ -78,12 +85,8 @@ export function listenForCommands(rt: CommandRuntime): Unsubscribe {
       if (change.type === 'removed') return;
       const cmd = change.doc.data() as CommandDoc;
       if (cmd.status !== 'pending') return;
-      // Device-binding: a command targets the device that owns the session. If
-      // it's for another device, IGNORE it completely — don't ack, don't run,
-      // don't error. Otherwise every device's agent would pick up every command
-      // and the ones that don't own the session would clobber the real result
-      // with "unknown/ended session". (Legacy commands without deviceId are
-      // still processed for back-compat.)
+      // Belt-and-suspenders: even within our own collection, ignore a command
+      // explicitly stamped for a different device.
       if (cmd.deviceId && cmd.deviceId !== rt.deviceId) return;
       // Fire-and-forget; each handler owns its own error reporting.
       void dispatch(rt, change.doc.id, cmd);
@@ -97,7 +100,7 @@ async function dispatch(rt: CommandRuntime, cmdId: string, cmd: CommandDoc): Pro
   if (processedCmds.has(cmdId)) return;
   processedCmds.add(cmdId);
   try {
-    await ack(rt.uid, cmdId);
+    await ack(rt, cmdId);
     switch (cmd.type) {
       case 'sendMessage':
         return await handleSendMessage(rt, cmdId, cmd);
@@ -107,10 +110,10 @@ async function dispatch(rt: CommandRuntime, cmdId: string, cmd: CommandDoc): Pro
       case 'deny':
         return await handleDecision(rt, cmdId, cmd);
       default:
-        await finish(rt.uid, cmdId, 'error', `unknown command type: ${cmd.type}`);
+        await finish(rt, cmdId, 'error', `unknown command type: ${cmd.type}`);
     }
   } catch (e: any) {
-    await finish(rt.uid, cmdId, 'error', String(e?.message ?? e)).catch(() => {});
+    await finish(rt, cmdId, 'error', String(e?.message ?? e)).catch(() => {});
   }
 }
 
@@ -118,7 +121,7 @@ async function handleSendMessage(rt: CommandRuntime, cmdId: string, cmd: Command
   // Security gate: remote execution is opt-in. 'off' refuses to run anything.
   if (rt.commandMode === 'off') {
     await finish(
-      rt.uid,
+      rt,
       cmdId,
       'error',
       'remote message execution is disabled on this device (CSD_COMMAND_MODE=off)',
@@ -127,19 +130,19 @@ async function handleSendMessage(rt: CommandRuntime, cmdId: string, cmd: Command
   }
   const text = cmd.payload?.text;
   if (!text) {
-    await finish(rt.uid, cmdId, 'error', 'sendMessage requires payload.text');
+    await finish(rt, cmdId, 'error', 'sendMessage requires payload.text');
     return;
   }
   const ctx = rt.getSession(cmd.sessionId);
   if (!ctx) {
-    await finish(rt.uid, cmdId, 'error', `unknown/ended session ${cmd.sessionId}`);
+    await finish(rt, cmdId, 'error', `unknown/ended session ${cmd.sessionId}`);
     return;
   }
   // Eligibility: only drive sessions the agent currently considers controllable
   // (live + resumable). Don't trust the dashboard's client-side gate — a forged
   // command bypasses the disabled Send button.
   if (!ctx.controllable) {
-    await finish(rt.uid, cmdId, 'error', `session ${cmd.sessionId} is not controllable`);
+    await finish(rt, cmdId, 'error', `session ${cmd.sessionId} is not controllable`);
     return;
   }
 
@@ -206,16 +209,16 @@ async function runTierA(
   await new Promise<void>((resolve) => {
     run.on('error', async (e: Error) => {
       activeRuns.delete(ctx.sessionId);
-      await finish(rt.uid, cmdId, 'error', `Tier A failed: ${e.message}`).catch(() => {});
+      await finish(rt, cmdId, 'error', `Tier A failed: ${e.message}`).catch(() => {});
       resolve();
     });
     run.on('close', async () => {
       activeRuns.delete(ctx.sessionId);
       if (run.killed) {
-        await finish(rt.uid, cmdId, 'done', 'interrupted').catch(() => {});
+        await finish(rt, cmdId, 'done', 'interrupted').catch(() => {});
       } else {
         const result = run.finalResult ?? collected.join('').slice(0, 500);
-        await finish(rt.uid, cmdId, 'done', `Tier A delivered (${result.length} chars)`).catch(
+        await finish(rt, cmdId, 'done', `Tier A delivered (${result.length} chars)`).catch(
           () => {},
         );
       }
@@ -229,9 +232,9 @@ async function handleInterrupt(rt: CommandRuntime, cmdId: string, cmd: CommandDo
   const run = activeRuns.get(cmd.sessionId);
   if (run) {
     run.interrupt();
-    await finish(rt.uid, cmdId, 'done', 'interrupt signalled to Tier A run');
+    await finish(rt, cmdId, 'done', 'interrupt signalled to Tier A run');
   } else {
-    await finish(rt.uid, cmdId, 'done', 'no controllable run to interrupt (Tier B sessions are user-driven)');
+    await finish(rt, cmdId, 'done', 'no controllable run to interrupt (Tier B sessions are user-driven)');
   }
 }
 
@@ -245,11 +248,11 @@ async function handleDecision(rt: CommandRuntime, cmdId: string, cmd: CommandDoc
   const decision: 'approved' | 'denied' = cmd.type === 'approve' ? 'approved' : 'denied';
   const reqId = cmd.payload?.reqId;
   if (!reqId) {
-    await finish(rt.uid, cmdId, 'error', `${cmd.type} requires payload.reqId`);
+    await finish(rt, cmdId, 'error', `${cmd.type} requires payload.reqId`);
     return;
   }
   // Merge the decision onto the EXISTING request doc keyed by reqId — do NOT
   // synthesize a new ts/tool, which would orphan the original as pending (F7).
   await writePermissionDecision(rt.uid, cmd.sessionId, reqId, decision, 'dashboard');
-  await finish(rt.uid, cmdId, 'done', `recorded ${decision} for ${reqId}`);
+  await finish(rt, cmdId, 'done', `recorded ${decision} for ${reqId}`);
 }

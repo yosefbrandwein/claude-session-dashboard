@@ -100,6 +100,9 @@ export const paths = {
   permissionRequests: (uid: string, sessionId: string) =>
     `users/${uid}/sessions/${sessionId}/permissionRequests`,
   commands: (uid: string) => `users/${uid}/commands`,
+  /** Per-device command channel — each agent listens only to its own. */
+  deviceCommands: (uid: string, deviceId: string) =>
+    `users/${uid}/devices/${deviceId}/commands`,
   presence: (uid: string, deviceId: string, sessionId: string) =>
     `presence/${uid}/${deviceId}/${sessionId}`,
 };

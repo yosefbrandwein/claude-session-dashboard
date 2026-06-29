@@ -110,39 +110,42 @@ export function useSessionDetail(
       setPermsLoaded(true);
     });
 
-    // Commands live in a per-USER collection; scope to this session so the
-    // drawer only reacts to its own sends. The agent flips status
-    // pending → acked → done|error and writes a `result` string (commands.ts).
-    const cmdsRef = query(
-      collection(db, paths.commands(uid)),
-      where('sessionId', '==', sessionId),
-    );
-    const unsubCmds = onSnapshot(cmdsRef, (snap) => {
-      const rows = snap.docs.map((d) => ({
-        id: d.id,
-        ...(d.data() as CommandDoc),
-      }));
-      setCommands(rows);
-      // Surface terminal commands exactly once: toast the result, then delete
-      // the doc so the per-user commands collection doesn't accumulate.
-      for (const c of rows) {
-        if (
-          (c.status === 'done' || c.status === 'error') &&
-          !surfacedRef.current.has(c.id)
-        ) {
-          surfacedRef.current.add(c.id);
-          onResultRef.current?.(c.status, c.result ?? '');
-          void deleteDoc(doc(db, paths.commands(uid), c.id)).catch(() => {});
+    // Commands live in the session's DEVICE command channel so only that
+    // device's agent processes them. Scope to this session so the drawer only
+    // reacts to its own sends. The agent flips pending → acked → done|error and
+    // writes a `result`. (No deviceId → can't route; skip the subscription.)
+    let unsubCmds = () => {};
+    if (deviceId) {
+      const cmdsRef = query(
+        collection(db, paths.deviceCommands(uid, deviceId)),
+        where('sessionId', '==', sessionId),
+      );
+      unsubCmds = onSnapshot(cmdsRef, (snap) => {
+        const rows = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as CommandDoc),
+        }));
+        setCommands(rows);
+        // Surface terminal commands exactly once: toast the result, then delete.
+        for (const c of rows) {
+          if (
+            (c.status === 'done' || c.status === 'error') &&
+            !surfacedRef.current.has(c.id)
+          ) {
+            surfacedRef.current.add(c.id);
+            onResultRef.current?.(c.status, c.result ?? '');
+            void deleteDoc(doc(db, paths.deviceCommands(uid, deviceId), c.id)).catch(() => {});
+          }
         }
-      }
-    });
+      });
+    }
 
     return () => {
       unsubMsgs();
       unsubPerms();
       unsubCmds();
     };
-  }, [uid, sessionId]);
+  }, [uid, sessionId, deviceId]);
 
   const commandInFlight = commands.some(
     (c) => c.status === 'pending' || c.status === 'acked',
@@ -152,11 +155,11 @@ export function useSessionDetail(
     type: CommandType,
     payload?: CommandDoc['payload'],
   ) => {
-    if (!uid || !sessionId) return;
+    if (!uid || !sessionId || !deviceId) return;
     const cmd = {
       type,
       sessionId,
-      ...(deviceId ? { deviceId } : {}),
+      deviceId,
       ...(payload ? { payload } : {}),
       status: 'pending' as const,
       // createdAt is declared as `number` in the shared contract. The agent's
@@ -164,7 +167,8 @@ export function useSessionDetail(
       // to match the contract instead of a Firestore Timestamp.
       createdAt: Date.now(),
     };
-    await addDoc(collection(db, paths.commands(uid)), cmd);
+    // Route to the owning device's command channel (per-device isolation).
+    await addDoc(collection(db, paths.deviceCommands(uid, deviceId)), cmd);
   };
 
   return {

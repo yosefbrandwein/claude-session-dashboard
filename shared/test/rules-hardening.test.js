@@ -77,6 +77,32 @@ test('HARDEN: a normal ack/done lifecycle is still ALLOWED', async () => {
   await assertSucceeds(updateDoc(doc(d, `users/${ALICE}/commands/r3`), { status: 'done', result: 'delivered' }));
 });
 
+// --- per-device command channel (same validation, isolated path) ------------
+test('DEVICE-PATH: a valid command in devices/{deviceId}/commands is ALLOWED', async () => {
+  const d = db(ALICE);
+  await assertSucceeds(
+    setDoc(doc(d, `users/${ALICE}/devices/dev1/commands/dc1`), {
+      type: 'sendMessage', sessionId: 's1', deviceId: 'dev1', status: 'pending', payload: { text: 'hi' }, createdAt: 1,
+    }),
+  );
+});
+
+test('DEVICE-PATH: an invalid type in devices/{deviceId}/commands is DENIED', async () => {
+  const d = db(ALICE);
+  await assertFails(
+    setDoc(doc(d, `users/${ALICE}/devices/dev1/commands/dc2`), {
+      type: 'evil', sessionId: 's1', deviceId: 'dev1', status: 'pending', createdAt: 1,
+    }),
+  );
+});
+
+test('DEVICE-PATH: replay (re-arm to pending) is DENIED in the device path too', async () => {
+  const d = db(ALICE);
+  await assertSucceeds(setDoc(doc(d, `users/${ALICE}/devices/dev1/commands/dc3`), { type: 'sendMessage', sessionId: 's1', deviceId: 'dev1', status: 'pending', payload: { text: 'hi' }, createdAt: 1 }));
+  await assertSucceeds(updateDoc(doc(d, `users/${ALICE}/devices/dev1/commands/dc3`), { status: 'done', result: 'ok' }));
+  await assertFails(updateDoc(doc(d, `users/${ALICE}/devices/dev1/commands/dc3`), { status: 'pending' }));
+});
+
 // --- F9: presence shape is validated ---------------------------------------
 const validPresence = () => ({ status: 'working', project: 'p', branch: null, pid: 1, startedAt: 1, lastActivityAt: 1, heartbeatAt: 1 });
 
