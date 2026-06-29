@@ -140,8 +140,11 @@ That's the whole thing. (macOS/Linux or manual: `npm install` in `packages/agent
 `~/.claude-dash/config.json` with the same login, then `npx tsx src/index.ts`.)
 
 **Keep it always-on** so the device stays on the dashboard after you close the terminal:
-   - **Windows:** register a Scheduled Task "At log on" running the agent (a `node`/`tsx` command),
-     or use `pm2 start "npx tsx src/index.ts" --name csd-agent`.
+   - **Windows (no admin, recommended):** double-click **`scripts\install-startup.cmd`** once on that
+     PC. It registers a hidden Startup shortcut (auto-detects the repo path) so the agent launches at
+     every logon. Remove it any time with `scripts\uninstall-startup.cmd`.
+   - **Windows (service-like, needs admin):** register a Scheduled Task "At log on" via an elevated
+     PowerShell (`Register-ScheduledTask … -Trigger (New-ScheduledTaskTrigger -AtLogOn)`).
    - **macOS:** a `launchd` LaunchAgent plist; **Linux:** a `systemd --user` service.
 
    The agent stamps a stable `deviceId = sha256(hostname)[:16]`, so each machine shows as its own
