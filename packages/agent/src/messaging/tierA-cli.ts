@@ -87,12 +87,10 @@ export const SANDBOX_DISALLOWED_TOOLS = [
   'KillShell',
   'Write',
   'Edit',
-  'MultiEdit',
   'NotebookEdit',
   'WebFetch',
   'WebSearch',
   'Task',
-  'SlashCommand',
 ];
 
 /** Build the full argv for a Tier A run (pure — unit-testable). */
@@ -107,17 +105,22 @@ export function buildTierAArgs(opts: TierAOptions): string[] {
     '--verbose', // required for stream-json to emit per-event lines
   );
   if (opts.model) args.push('--model', opts.model);
-  // SECURITY (default): a dashboard-driven run is SANDBOXED. We force the
-  // non-bypassing 'default' permission mode (so a resumed session can't carry a
-  // bypassPermissions posture) and deny the destructive tool set. This turns the
-  // sendMessage primitive from "arbitrary RCE" into "read-only assistant" unless
-  // the operator explicitly opts the whole agent into CSD_COMMAND_MODE=full.
-  if (opts.sandbox !== 'full') {
-    args.push('--permission-mode', 'default');
-    args.push('--disallowedTools', SANDBOX_DISALLOWED_TOOLS.join(','));
-  }
   if (opts.extraArgs) args.push(...opts.extraArgs);
-  // The prompt is passed positionally LAST so it isn't mistaken for a flag value.
+  // SECURITY (default): a dashboard-driven run is SANDBOXED. We deny the
+  // destructive tool set and force the non-bypassing 'default' permission mode
+  // (so a resumed session can't carry a bypassPermissions posture). This turns
+  // the sendMessage primitive from "arbitrary RCE" into "read-only assistant"
+  // unless the operator opts the whole agent into CSD_COMMAND_MODE=full.
+  //
+  // ORDER MATTERS: --disallowedTools is VARIADIC — it greedily consumes the args
+  // that follow. We MUST place a non-variadic flag (--permission-mode) AFTER it,
+  // otherwise the positional prompt gets swallowed as bogus "tool names",
+  // leaving the run with no prompt (which fails as "No deferred tool marker…").
+  if (opts.sandbox !== 'full') {
+    args.push('--disallowedTools', SANDBOX_DISALLOWED_TOOLS.join(','));
+    args.push('--permission-mode', 'default');
+  }
+  // Prompt LAST — shielded from the variadic flag by --permission-mode above.
   args.push(opts.text);
   return args;
 }

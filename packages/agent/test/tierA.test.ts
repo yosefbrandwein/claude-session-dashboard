@@ -36,7 +36,7 @@ const FAKE = path.join(
   'fake-claude.mjs',
 );
 
-test('buildTierAArgs (default=safe) sandboxes the run: forces default permission mode + denies dangerous tools, prompt last', () => {
+test('buildTierAArgs (default=safe) sandboxes the run: denies dangerous tools, prompt last + shielded', () => {
   const args = buildTierAArgs({ sessionId: 'S', text: 'hello world', model: 'claude-opus-4-8' });
   assert.deepEqual(args, [
     '--print',
@@ -47,17 +47,23 @@ test('buildTierAArgs (default=safe) sandboxes the run: forces default permission
     '--verbose',
     '--model',
     'claude-opus-4-8',
+    '--disallowedTools',
+    'Bash,BashOutput,KillShell,Write,Edit,NotebookEdit,WebFetch,WebSearch,Task',
     '--permission-mode',
     'default',
-    '--disallowedTools',
-    'Bash,BashOutput,KillShell,Write,Edit,MultiEdit,NotebookEdit,WebFetch,WebSearch,Task,SlashCommand',
     'hello world',
   ]);
   // prompt must be the final positional arg
   assert.equal(args[args.length - 1], 'hello world');
-  // the deny list must include shell execution + file mutation
+  // CRITICAL: the variadic --disallowedTools must be followed by a NON-variadic
+  // flag (--permission-mode) so it can't swallow the prompt. Assert that order.
+  assert.ok(args.indexOf('--disallowedTools') < args.indexOf('--permission-mode'));
+  assert.equal(args[args.indexOf('--disallowedTools') + 2], '--permission-mode');
+  // deny list covers shell execution + file mutation + network
   const deny = args[args.indexOf('--disallowedTools') + 1];
   for (const t of ['Bash', 'Write', 'Edit', 'WebFetch']) assert.ok(deny.includes(t));
+  // and must NOT contain the non-existent tool names that triggered warnings
+  for (const bad of ['MultiEdit', 'SlashCommand']) assert.ok(!deny.includes(bad));
 });
 
 test('buildTierAArgs sandbox=full omits the restriction flags (explicit opt-in)', () => {
